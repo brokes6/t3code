@@ -23,7 +23,8 @@ import { Separator } from "../ui/separator";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { formatContextWindowCompactionMessage } from "./compaction.logic";
 import { composerFloatingLayerProps } from "./composerEventScope";
-import { limitTone, UsageBar, type ThreadDetailsUsageInput } from "./ThreadDetailsUsage";
+import { limitTone, UsageBar } from "../usage/UsageBar";
+import type { ThreadDetailsUsageInput } from "./ThreadDetailsUsage";
 import {
   limitResetCreditCount,
   resolveThreadDetailsLimits,

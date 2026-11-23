@@ -19,6 +19,7 @@ import { cn } from "../../lib/utils";
 import { spendBudgetDetails, spendBudgetLabel } from "../../lib/spendBudget";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { limitTone, UsageBar, type UsageTone } from "../usage/UsageBar";
 import { formatContextWindowCompactionMessage } from "./compaction.logic";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import {
@@ -39,14 +40,6 @@ export interface ThreadDetailsUsageInput {
   readonly providers: readonly ServerProvider[];
   readonly sources: UsageLimitSourceSnapshots;
   readonly contextWindow: ContextWindowSnapshot | null;
-}
-
-type UsageTone = "error" | "warning" | null;
-
-export function limitTone(left: number): UsageTone {
-  if (left <= 10) return "error";
-  if (left <= 20) return "warning";
-  return null;
 }
 
 /** The selected provider's limit windows. Each row reads as room left and opens the usage page. */
@@ -279,48 +272,7 @@ function PoolRow({ window, now }: { readonly window: LimitPoolWindow; readonly n
   );
 }
 
-export function UsageBar({
-  fill,
-  tone,
-  tick,
-  muted = false,
-}: {
-  readonly fill: number;
-  readonly tone: UsageTone;
-  readonly tick: number | null;
-  readonly muted?: boolean;
-}) {
-  return (
-    <span
-      aria-hidden
-      className="relative block h-[3px] rounded-full bg-muted-foreground/30 dark:bg-muted-foreground/20"
-    >
-      {fill > 0 ? (
-        <span
-          className={cn(
-            "absolute inset-y-0 left-0 rounded-full",
-            tone === "error"
-              ? "bg-error"
-              : tone === "warning"
-                ? "bg-warning"
-                : muted
-                  ? "bg-muted-foreground"
-                  : "bg-foreground/80",
-          )}
-          style={{ width: `max(${fill}%, 6px)` }}
-        />
-      ) : null}
-      {tick !== null ? (
-        <span
-          className="absolute -top-[3px] h-[9px] w-px -translate-x-1/2 bg-foreground/75"
-          style={{ left: `clamp(0.5px, ${tick}%, calc(100% - 0.5px))` }}
-        />
-      ) : null}
-    </span>
-  );
-}
-
-/** One label, hairline, and value row; the whole row opens the details tooltip. With `opensUsage` it links to the usage page. */
+/** One label, bar, and value row; the whole row opens the details tooltip. With `opensUsage` it links to the usage page. */
 function UsageRow({
   label,
   fill,

@@ -19,10 +19,9 @@ import {
 } from "@t3tools/shared/usageLimits";
 import { GaugeIcon, TrendingDownIcon, TrendingUpIcon } from "lucide-react";
 import { msg, T, useGT, useMessages } from "gt-react";
-import { Fragment, useLayoutEffect, useState } from "react";
+import { Fragment, useState } from "react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
-import { observeResize } from "../../lib/observeResize";
 import { environmentPresentations } from "../../state/presentation";
 import { useEnvironmentScope, readEnvironmentScope } from "../../state/session";
 import { serverEnvironment } from "../../state/server";
@@ -40,6 +39,7 @@ import {
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { UsageLimitsPooled } from "./UsageLimitsPooled";
+import { limitTone, UsageBar } from "./UsageBar";
 import { formatResetsIn, resetCreditChoices } from "@t3tools/shared/usageLimitsCopy";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
@@ -83,44 +83,6 @@ export function PaceIcon({ pace }: { readonly pace: LimitPace }) {
   );
 }
 
-// The tick sits in a transparent gap cut from the bar, clamped so it stays inside at 0% and 100%.
-// The gap is a clip-path slot rather than a mask: a mask composites its layer and re-antialiases
-// the bar's rounded ends, and the polygon reaches 1px past the box so only the slot edges clip.
-function paceMarkStyles(timeLeft: number | null) {
-  if (timeLeft === null) return null;
-  const at = `clamp(3px, ${timeLeft}%, calc(100% - 3px))`;
-  const [left, right] = [`calc(${at} - 3px)`, `calc(${at} + 3px)`];
-  const [near, far] = ["-1px", "calc(100% + 1px)"];
-  return {
-    tick: { left: at },
-    gap: {
-      clipPath: `polygon(${near} ${near}, ${left} ${near}, ${left} ${far}, ${right} ${far}, ${right} ${near}, ${far} ${near}, ${far} ${far}, ${near} ${far})`,
-    },
-    // For a track painted on an element that also draws focus rings, which a clip would cut.
-    gappedTrack: {
-      backgroundColor: "transparent",
-      backgroundImage: `linear-gradient(to right, var(--color-muted) ${left}, transparent ${left}, transparent ${right}, var(--color-muted) ${right})`,
-    },
-  };
-}
-
-/**
- * Pace mark styles for the bar given the returned ref. Below 6px there is no room for the gap
- * and tick, so the bar draws neither, as the mobile bars do.
- */
-export function usePaceMark(timeLeft: number | null) {
-  const [bar, setBar] = useState<HTMLElement | null>(null);
-  const [roomy, setRoomy] = useState(false);
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the bar DOM width before paint and remeasures through a ResizeObserver
-  useLayoutEffect(() => {
-    if (!bar) return;
-    const measure = () => setRoomy(bar.getBoundingClientRect().width >= 6);
-    measure();
-    return observeResize(bar, measure);
-  }, [bar]);
-  return [setBar, roomy ? paceMarkStyles(timeLeft) : null] as const;
-}
-
 function WindowBar({
   color,
   window,
@@ -135,7 +97,6 @@ function WindowBar({
   const m = useMessages();
   const remaining = remainingPercent(window);
   const timeLeft = paceRemainingPercent(window, now);
-  const [barRef, paceMark] = usePaceMark(timeLeft);
   const resetsIn = formatResetsIn(window, now, m);
   const resetsAt = window.resetsAt
     ? formatUpcomingTimestamp(window.resetsAt, timestampFormat, now, undefined, m)
@@ -164,31 +125,14 @@ function WindowBar({
       <TooltipTrigger
         render={
           <div
-            ref={barRef}
             role="img"
             aria-label={summary}
             tabIndex={0}
-            className="relative h-6 cursor-default rounded-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="grid h-6 cursor-default items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
         }
       >
-        {/* Clip both layers so the gap exposes even a translucent composer surface. */}
-        <div className="absolute inset-0" style={paceMark?.gap}>
-          <div className="absolute inset-x-0 inset-y-1.5 rounded-full bg-muted" />
-          {remaining > 0 ? (
-            <div
-              className="absolute inset-y-1.5 left-0 rounded-full"
-              style={{ width: `${remaining}%`, backgroundColor: color }}
-            />
-          ) : null}
-        </div>
-        {paceMark ? (
-          <span
-            aria-hidden
-            className="absolute inset-y-1 w-0.5 -translate-x-1/2 rounded-full bg-foreground"
-            style={paceMark.tick}
-          />
-        ) : null}
+        <UsageBar fill={remaining} tick={timeLeft} tone={limitTone(remaining)} color={color} />
       </TooltipTrigger>
       <TooltipPopup side="top">
         <div className="flex flex-col gap-0.5">
