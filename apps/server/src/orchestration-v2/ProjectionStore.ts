@@ -6041,8 +6041,17 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       `;
       if (rows.length === 0) return yield* new ProjectionStoreThreadNotFoundError({ threadId });
     });
+    // Fork-only index, built on first use so it never takes an upstream migration number.
+    const ensureProviderTurnSpendIndex = yield* Effect.cached(
+      sql`
+        CREATE INDEX IF NOT EXISTS orchestration_v2_provider_turn_spend_idx
+        ON orchestration_v2_projection_provider_turns(provider_thread_id, completed_at)
+        WHERE completed_at IS NOT NULL AND status IN ('completed', 'failed', 'interrupted', 'cancelled')
+      `.pipe(Effect.ignore({ log: true })),
+    );
     const readProviderTurnSpend = Effect.fn("ProjectionStore.readProviderTurnSpend")(
       function* (instanceId: ProviderInstanceId, start: DateTime.Utc, end: DateTime.Utc) {
+        yield* ensureProviderTurnSpendIndex;
         const rows = yield* sql<{ readonly amount: number }>`
           SELECT COALESCE(SUM(CASE WHEN json_valid(turn.payload_json)
             THEN json_extract(turn.payload_json, '$.costUsd') END), 0.0) AS amount
