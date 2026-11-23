@@ -1,3 +1,4 @@
+import { ComposerWorkerChip } from "./ComposerWorkerPicker";
 import { copySnapshot as copySnapshotToClipboard } from "./copySnapshot";
 import { InlineAudioPreview } from "../files/InlineAudioPreview";
 import { filePreviewKind } from "@t3tools/shared/filePreview";
@@ -5,6 +6,8 @@ import type { MarkdownExtensions } from "~/markdown/wordsHast";
 import { T, useGT, useMessages, Var } from "gt-react";
 import { findRevealRef } from "./markdownFindContext";
 import {
+  type ComposerWorkerRequest,
+  type RunId,
   type EnvironmentId,
   type MessageId,
   type ScheduledTaskId,
@@ -14,7 +17,7 @@ import {
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import { Link } from "@tanstack/react-router";
-import { useQuietThreadShell } from "../../state/entities";
+import { useQuietThreadProjection, useQuietThreadShell } from "../../state/entities";
 import { useEnvironment } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
@@ -276,6 +279,30 @@ export function UserMessageRow({ row }: { row: Extract<TimelineRow, { kind: "mes
       ) : null}
       <UserMessageContent row={row} />
     </>
+  );
+}
+
+function WorkerRequestReceipt({
+  request,
+  runId,
+}: {
+  request: ComposerWorkerRequest;
+  runId: RunId | null;
+}) {
+  const gt = useGT();
+  const { threadRef } = use(TimelineRowCtx);
+  const projection = useQuietThreadProjection(runId === null ? null : threadRef)?.projection;
+  const agents = projection?.subagents.filter((agent) => agent.runId === runId) ?? [];
+  const started = agents.filter((agent) => agent.startedAt !== null).length;
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-1.5">
+      <ComposerWorkerChip request={request} />
+      {projection ? (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {gt("{started}/{count} workers started", { started, count: request.count })}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -905,6 +932,17 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
       className="group @container flex flex-col items-end gap-1"
       data-user-message-attribution={folded ? "agent" : undefined}
     >
+      {row.message.context?.workers ? (
+        <WorkerRequestReceipt
+          request={row.message.context.workers}
+          runId={
+            row.message.inputIntent === "steer" ||
+            row.message.inputIntent === "promoted_queued_to_steer"
+              ? null
+              : row.message.runId
+          }
+        />
+      ) : null}
       {userMessage.attribution === "t3code" ? (
         <p
           className="me-1 text-2xs text-muted-foreground/70"

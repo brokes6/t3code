@@ -256,6 +256,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { assistantCitationLabel } from "@t3tools/shared/assistantCitations";
 import { assistantCitationNavigation } from "../../lib/assistantCitationNavigation";
 import { Button } from "../ui/button";
+import { ComposerWorkerChip, ComposerWorkerPicker } from "./ComposerWorkerPicker";
 import { Spinner } from "../ui/spinner";
 import { useManagedPolicy } from "../../state/managedPolicy";
 import { hasProviderSetup } from "./ProviderStatusBanner";
@@ -381,6 +382,7 @@ export interface ChatComposerProps {
   draftId: DraftId | null;
   multipleModelSelections: ReadonlyArray<ModelSelection> | null;
   supportsMultipleModels: boolean;
+  supportsWorkerRequests?: boolean;
   onMultipleModelSelectionsChange: React.Dispatch<
     React.SetStateAction<ReadonlyArray<ModelSelection> | null>
   >;
@@ -1097,6 +1099,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isDragOverComposer, setIsDragOverComposer] = useState(false);
   const [isComposerFooterCompact, setIsComposerFooterCompact] = useState(false);
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
+  const [workerPickerOpen, setWorkerPickerOpen] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
   const isMobileViewport = useMediaQuery("max-sm");
   const isSoftwareKeyboardOpen = useSoftwareKeyboardOpen();
@@ -1226,6 +1229,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     sideChatAvailable: props.sideChatAvailable === true,
     sideChatDisabledReason: props.sideChatDisabledReason ?? null,
     freshSessionAvailable: props.onFreshSession !== undefined,
+    workerAvailable:
+      props.supportsWorkerRequests === true &&
+      canOperateThread &&
+      !isLiteralPendingAnswer &&
+      !isEditingQueuedMessage &&
+      multipleModelSelections === null,
     compactSlashCommandAvailable,
     selectedProvider,
     selectedProviderSkills,
@@ -2080,6 +2089,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return;
     }
     if (item.type === "slash-command") {
+      if (item.command === "worker") {
+        const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
+          expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+          focusEditorAfterReplace: false,
+        });
+        if (applied) {
+          setComposerHighlightedItemId(null);
+          setWorkerPickerOpen(true);
+        }
+        return;
+      }
       if (item.command === "model") {
         const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
           expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
@@ -3682,6 +3702,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       data-chat-composer-form="true"
       {...threadContextDropTargetProps()}
     >
+      {workerPickerOpen ? (
+        <ComposerWorkerPicker
+          request={composerDraft.workers}
+          providers={providerInstanceEntries}
+          onClose={() => {
+            setWorkerPickerOpen(false);
+            scheduleComposerFocus();
+          }}
+          onApply={(workers) => {
+            useComposerDraftStore.getState().setWorkers(composerDraftTarget, workers);
+            setWorkerPickerOpen(false);
+            scheduleComposerFocus();
+          }}
+        />
+      ) : null}
       <ComposerBanner.Dock>
         <ComposerBanner.Column>
           <ComposerBannerStack items={shelfItems} />
@@ -3742,6 +3777,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               composerProviderState.composerSurfaceClassName,
             )}
           >
+            {composerDraft.workers && !isLiteralPendingAnswer && !isEditingQueuedMessage ? (
+              <div className="min-w-0 px-3 pt-2">
+                <ComposerWorkerChip
+                  request={composerDraft.workers}
+                  onEdit={() => setWorkerPickerOpen(true)}
+                  onRemove={() =>
+                    useComposerDraftStore.getState().setWorkers(composerDraftTarget, undefined)
+                  }
+                />
+              </div>
+            ) : null}
             {showCollapsedMobilePromptRow ? (
               <div className="flex items-center justify-between gap-2 px-3 py-2">
                 <button

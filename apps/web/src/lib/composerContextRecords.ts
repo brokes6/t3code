@@ -552,6 +552,7 @@ export function buildMessageContext(input: {
   threadContexts?: ReadonlyArray<ThreadContextRecord>;
   environmentContexts?: ReadonlyArray<EnvironmentContextRecord>;
   replyTo?: ResponseContextRecord | null;
+  workers?: OrchestrationMessageContext["workers"];
   attachments?: ReadonlyArray<BoundComposerAttachment>;
 }): OrchestrationMessageContext | undefined {
   const screenshotAttachmentIds = new Set(
@@ -572,7 +573,9 @@ export function buildMessageContext(input: {
     ),
     ...(input.attachments ?? []).map(attachmentContextRecord),
   ];
-  return records.length === 0 ? undefined : { version: 1, records };
+  return records.length === 0 && input.workers === undefined
+    ? undefined
+    : { version: 1, records, ...(input.workers && { workers: input.workers }) };
 }
 
 export function asKnownContextRecord(

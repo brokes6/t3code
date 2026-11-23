@@ -315,6 +315,7 @@ export function restoreComposerDraft(
     current?.prompt.trim() ? `${current.prompt}\n\n${snapshot.draftText}` : snapshot.draftText,
   );
   store.setReplyTo(draftTarget, current?.replyTo ?? snapshot.replyTo);
+  store.setWorkers(draftTarget, current?.workers ?? snapshot.workers);
   store.addImages(draftTarget, images);
   store.addFiles(draftTarget, snapshot.files);
   store.setTerminalContexts(

@@ -1120,6 +1120,34 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           ),
         );
   const threads = useQuietThreadShells();
+  const workersByParent = new Map<string, EnvironmentThreadShell[]>();
+  for (const child of threads) {
+    const parent =
+      child.delegatedFrom ??
+      (child.lineage.relationshipToParent === "subagent" && child.lineage.parentThreadId !== null
+        ? scopeThreadRef(child.environmentId, child.lineage.parentThreadId)
+        : null);
+    if (!parent || child.deletedAt !== null || child.archivedAt !== null) continue;
+    const key = scopedThreadKey(parent);
+    const siblings = workersByParent.get(key);
+    if (siblings) siblings.push(child);
+    else workersByParent.set(key, [child]);
+  }
+  const workerModelsByParent = new Map(
+    [...workersByParent].map(
+      ([key, children]) =>
+        [
+          key,
+          children.map((child) => ({
+            key: threadShellKey(child),
+            model: child.modelSelection.model,
+            provider: providerEntriesByEnvironment
+              .get(child.environmentId)
+              ?.get(child.modelSelection.instanceId),
+          })),
+        ] as const,
+    ),
+  );
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
   const listedThreads =
     promotingDraftThreadKeys.length === 0
@@ -3578,6 +3606,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               providerEntriesByEnvironment.get(thread.environmentId) ??
                               EMPTY_PROVIDER_ENTRIES
                             }
+                            workerModels={workerModelsByParent.get(threadKey)}
                             timestampFormat={timestampFormat}
                             onThreadClick={handleThreadClick}
                             onThreadActivate={navigateToThread}

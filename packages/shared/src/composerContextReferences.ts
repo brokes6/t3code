@@ -6,6 +6,7 @@ import {
   type ElementContextDetails,
   type EnvironmentId,
   type KnownComposerContextRecord,
+  type ComposerWorkerRequest,
   type ScopedThreadRef,
   type ThreadContextRecord,
 } from "@t3tools/contracts";
@@ -392,6 +393,23 @@ function formatEnvelopeEntry(
 }
 
 export function projectComposerContextForProvider(input: {
+  text: string;
+  records: ReadonlyArray<ComposerContextRecord>;
+  workers?: ComposerWorkerRequest | undefined;
+}): string {
+  const text = projectComposerReferences(input);
+  const workers = input.workers;
+  if (!workers) return text;
+  const selection =
+    workers.model === "inherit"
+      ? "Use your current provider and model for each worker."
+      : workers.model === "auto"
+        ? "Choose available providers and models appropriate for the work."
+        : `Use this provider instance and model for each worker: ${JSON.stringify(workers.model)}.`;
+  return `${text}\n\nThe user requested ${workers.count} worker(s) for this turn. Delegate separate tasks for the request above, then integrate their results. ${selection} If a requested worker cannot start with the selected model, report that instead of substituting a model.`;
+}
+
+function projectComposerReferences(input: {
   text: string;
   records: ReadonlyArray<ComposerContextRecord>;
 }): string {

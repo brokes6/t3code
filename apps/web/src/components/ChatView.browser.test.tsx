@@ -6,6 +6,7 @@ import {
   NodeId,
   ORCHESTRATION_V2_WS_METHODS,
   PlanId,
+  ProviderInstanceId,
   RunId,
   ThreadId,
   WS_METHODS,
@@ -48,6 +49,7 @@ import {
   assistantItem,
   dispatchedCommands,
   emitThreadEvent,
+  emitThreadShell,
   hasPendingAssetUrl,
   installFakeEnvironment,
   rejectPendingCommand,
@@ -457,6 +459,69 @@ it("opens the current turn’s task steps and keeps them open as progress update
   await router.navigate({ to: `/${ENVIRONMENT_ID}/${other.id}` });
   await expect.element(page.getByText("Answer 0 for no-task-steps.")).toBeVisible();
   await expect.element(completedToggle).not.toBeInTheDocument();
+});
+
+it("configures workers from the slash menu and sends the selection with the message", async () => {
+  const style = document.createElement("style");
+  style.textContent = stylesheet;
+  document.head.append(style);
+  using _style = { [Symbol.dispose]: () => style.remove() };
+  const thread = threadWithHistory("worker-composer", 1);
+  const workerModel = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.5" };
+  const worker = {
+    ...threadWithHistory("worker-child", 1, workerModel),
+    providerSubagentOf: thread.id,
+  };
+  using _environment = installFakeEnvironment([thread, worker], { acceptCommands: true });
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  await page.viewport(1280, 800);
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${thread.id}`] }),
+  );
+  await router.load();
+  await using _app = await render(<AppRoot router={router} />, {
+    // AppRoot brings its own router.
+    router: false,
+  });
+  const editor = page.getByTestId("composer-editor");
+  await expect.element(editor).toBeVisible();
+  await emitThreadShell(thread);
+  await emitThreadShell(worker);
+  await expect
+    .element(page.getByTestId("sidebar-worker-model"))
+    .toHaveAttribute("data-sidebar-worker-model", "gpt-5.5");
+  await editor.click();
+  await insertText("/worker");
+  await userEvent.keyboard("{Enter}");
+  const dialog = page.getByRole("dialog", { name: "Add workers" });
+  await dialog.getByRole("button", { name: "2", exact: true }).click();
+  const model = dialog.getByRole("combobox", { name: "Worker model" });
+  await expect.element(model).toHaveTextContent("Same as main agent");
+  await model.click();
+  await page.getByRole("option", { name: /GPT-5\.5/ }).click();
+  await dialog.getByRole("button", { name: "Apply to this message" }).click();
+  await expect
+    .element(page.getByRole("button", { name: "Remove worker configuration" }))
+    .toBeVisible();
+  expect(dispatchedCommands().some((command) => command.type === "message.dispatch")).toBe(false);
+  await editor.click();
+  await insertText("Implement the feature");
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(dispatchedCommands()).toContainEqual(
+      expect.objectContaining({
+        type: "message.dispatch",
+        text: "Implement the feature",
+        context: { version: 1, records: [], workers: { count: 2, model: workerModel } },
+      }),
+    ),
+  );
+  await expect
+    .element(page.getByRole("button", { name: "Remove worker configuration" }))
+    .not.toBeInTheDocument();
 });
 
 it("a new draft does not load its reserved thread before the server lists it", async () => {

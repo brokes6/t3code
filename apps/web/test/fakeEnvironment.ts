@@ -115,7 +115,7 @@ const makeServerConfig = (
   ...decodeServerConfig({
     environment: {
       ...descriptor,
-      capabilities: { ...descriptor.capabilities, issues: supportsIssues },
+      capabilities: { ...descriptor.capabilities, issues: supportsIssues, workerRequests: true },
     },
     auth,
     cwd: "/workspace/render",
@@ -723,6 +723,19 @@ export async function emitTerminalMetadata(event: TerminalMetadataStreamEvent): 
 /** Whether the app holds a live subscription to the thread, so events reach it. */
 export function isThreadSubscribed(threadId: ThreadId): boolean {
   return threadSubscribers.has(threadId);
+}
+
+export async function emitThreadShell(thread: FakeThread): Promise<void> {
+  if (!shellSubscriber) throw new Error("No live shell subscription");
+  sequence += 1;
+  await Effect.runPromise(
+    Queue.offer(shellSubscriber, {
+      kind: "thread.updated",
+      sequence,
+      location: "active",
+      thread: shellOf(thread),
+    }),
+  );
 }
 
 /** Delivers one domain event, such as a run or turn-item update, to the thread's subscription. */

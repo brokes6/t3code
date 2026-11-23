@@ -285,6 +285,11 @@ the snooze. Enable **Snooze until limits reset** in thread behavior settings to
 snooze limit stops by default. Providers without a reset time offer manual
 retry and the normal snooze choices.
 
+On web and desktop, type `/worker` in the composer to ask the main agent to
+delegate work for your next message. Choose how many workers to request and
+which model they should use. Workers start after you send the message and the
+main agent assigns their tasks.
+
 On web and desktop, use **Agents** to follow work delegated to subagents. Click
 a subagent there or on its conversation card to open it in the right panel,
 beside the thread you are in. See

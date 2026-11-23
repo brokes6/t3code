@@ -3430,6 +3430,32 @@ for (const previousMessages of [[], ["/compact", " /COMPACT "]]) {
   );
 }
 
+effectIt.effect(
+  "passes a structured worker request to the provider without rewriting the user message",
+  () =>
+    Effect.gen(function* () {
+      const text = "Implement the feature.";
+      const harness = makeLocalCommandHarness({ text, failReadsAfterRunning: true });
+      const projection = harness.projection();
+      harness.setProjection({
+        ...projection,
+        messages: projection.messages.map((message) => ({
+          ...message,
+          context: { version: 1, records: [], workers: { count: 2, model: "inherit" } },
+        })),
+      });
+
+      yield* harness.start;
+
+      expect(harness.startRootRun.mock.calls[0]?.[0]).toMatchObject({
+        message: {
+          text: expect.stringMatching(/^Implement the feature\.[\s\S]*requested 2 worker/),
+        },
+      });
+      expect(harness.projection().messages[0]?.text).toBe(text);
+    }),
+);
+
 effectIt.effect("rejects citation expansion before opening a provider session", () =>
   Effect.gen(function* () {
     const marker = serializeAssistantCitation({

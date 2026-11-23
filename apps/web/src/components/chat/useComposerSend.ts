@@ -142,7 +142,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { Dispatch } from "react";
 import type { ComposerThreadTarget } from "../../composerDraftStore";
-import type { ProviderInstanceEntry } from "../../providerInstances";
+import { isProviderInstancePickerReady, type ProviderInstanceEntry } from "../../providerInstances";
 import type { SessionPhase } from "../../types";
 import type { DraftSessionState } from "../../composerDraftStore";
 import type { ComposerHandleRef } from "../../composerHandleContext";
@@ -616,6 +616,34 @@ export function useComposerSend(input: ComposerSendInput) {
       );
       return true;
     };
+    const workers =
+      answeringQuestion || queuedRunEdit.isEditing
+        ? undefined
+        : useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.workers;
+    if (
+      workers &&
+      readEnvironmentPresentation(environmentId)?.serverConfig?.environment.capabilities
+        .workerRequests !== true
+    ) {
+      setThreadError(activeThread.id, m(msg("This environment doesn't support worker requests.")));
+      return;
+    }
+    if (workers && (sideChatCommand || sendCtx?.multipleModelSelections != null)) {
+      setThreadError(activeThread.id, m(msg("Workers require a single main agent in this chat.")));
+      return;
+    }
+    if (workers && typeof workers.model !== "string") {
+      const { instanceId, model } = workers.model;
+      const provider = providerInstanceEntries.find((entry) => entry.instanceId === instanceId);
+      if (
+        !provider ||
+        !isProviderInstancePickerReady(provider) ||
+        !provider.models.some(({ slug }) => slug === model)
+      ) {
+        setThreadError(activeThread.id, m(msg("Worker model unavailable")));
+        return;
+      }
+    }
     if (onSideChat && sendCtx && sideChatCommand && sideChatDisabledReason === null) {
       const replyTo =
         useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.replyTo ?? null;
@@ -995,6 +1023,7 @@ export function useComposerSend(input: ComposerSendInput) {
       threadContexts: composerThreadContexts,
       environmentContexts: composerEnvironmentContexts,
       replyTo,
+      workers,
     });
     const {
       files: composerFilesSnapshot,
@@ -1047,6 +1076,7 @@ export function useComposerSend(input: ComposerSendInput) {
         threadContexts: composerThreadContextsSnapshot,
         environmentContexts: composerEnvironmentContextsSnapshot,
         replyTo,
+        workers,
         attachments: composerAttachmentsSnapshot.map((attachment, index) => ({
           attachment,
           attachmentId: attachmentIds[index] ?? attachment.id,

@@ -205,6 +205,45 @@ function terminalProcessLabel(count: number, resolve: MessageResolver): string {
   );
 }
 
+type SidebarWorkerModel = {
+  readonly key: string;
+  readonly model: string;
+  readonly provider: SidebarProviderEntry | undefined;
+};
+
+function SidebarWorkerMarks({
+  workers,
+}: {
+  workers: ReadonlyArray<SidebarWorkerModel> | undefined;
+}) {
+  if (!workers?.length) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5 text-3xs text-muted-foreground">
+      {workers.slice(0, 2).map(({ key, model, provider }) => (
+        <span
+          key={key}
+          data-testid="sidebar-worker-model"
+          data-sidebar-worker-model={model}
+          className="inline-flex size-3.5 items-center justify-center rounded-full border border-current/30"
+        >
+          {provider ? (
+            <ProviderInstanceIcon
+              driverKind={provider.driverKind}
+              displayName={provider.displayName}
+              acpRegistryAgentId={provider.acpRegistryAgentId}
+              acpRegistryIconUrl={provider.acpRegistryIconUrl}
+              iconClassName="size-2.5 opacity-70"
+            />
+          ) : (
+            model.slice(0, 1).toUpperCase()
+          )}
+        </span>
+      ))}
+      {workers.length > 2 ? <span className="tabular-nums">+{workers.length - 2}</span> : null}
+    </span>
+  );
+}
+
 function SidebarProviderStack(props: {
   thread: SidebarThreadSummary;
   providerEntryByInstanceId: ReadonlyMap<string, SidebarProviderEntry>;
@@ -267,6 +306,7 @@ function SidebarThreadTooltip({
   branchMismatch,
   terminalStatus,
   terminalProcessCount,
+  workerModels,
 }: {
   thread: SidebarThreadSummary;
   project: ProjectFaviconProject | null;
@@ -284,6 +324,7 @@ function SidebarThreadTooltip({
   } | null;
   terminalStatus: TerminalStatusIndicator | null;
   terminalProcessCount: number;
+  workerModels?: ReadonlyArray<SidebarWorkerModel> | undefined;
 }) {
   const driverKind = providerEntry?.driverKind ?? null;
   const worktreePath = thread.worktreePath?.trim();
@@ -360,6 +401,16 @@ function SidebarThreadTooltip({
                 ? `${modelLabel} · ${providerEntry.displayName}`
                 : modelLabel}
             </div>
+          </div>
+        ) : null}
+        {workerModels?.length ? (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground">{gt("Workers")}</span>
+            {workerModels.map(({ key, model, provider }) => (
+              <div key={key} className="min-w-0 truncate text-xs text-foreground/75">
+                {provider?.displayName ? `${provider.displayName} · ${model}` : model}
+              </div>
+            ))}
           </div>
         ) : null}
         {previousProviderNames.length > 0 ? (
@@ -582,6 +633,7 @@ function TopStatusIcon(props: { icon: keyof typeof TOP_STATUS_ICONS; className: 
 
 type SidebarThreadRowProps = {
   thread: SidebarThreadSummary;
+  workerModels?: ReadonlyArray<SidebarWorkerModel> | undefined;
   // "folder" is a one-line row inside a boring sidebar project folder;
   // "folder-multiline" adds the card's environment and PR line under it.
   variant: "card" | "slim" | "folder" | "folder-multiline";
@@ -871,6 +923,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
 
   const detailsTooltip = (
     <SidebarThreadTooltip
+      workerModels={props.workerModels}
       thread={checkoutThread}
       project={props.project}
       projectDisplayName={props.projectDisplayName}
@@ -1294,6 +1347,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         aria-hidden
         className="pointer-events-none ml-auto inline-flex shrink-0 items-center gap-1"
       >
+        <SidebarWorkerMarks workers={props.workerModels} />
         <SidebarProviderStack
           thread={thread}
           providerEntryByInstanceId={props.providerEntryByInstanceId}
@@ -1303,6 +1357,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   );
   const titleLineIcons = metaLineEmpty ? (
     <span aria-hidden className="inline-flex shrink-0 items-center gap-1">
+      <SidebarWorkerMarks workers={props.workerModels} />
       <SidebarProviderStack
         thread={thread}
         providerEntryByInstanceId={props.providerEntryByInstanceId}

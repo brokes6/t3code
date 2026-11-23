@@ -3850,6 +3850,9 @@ export default function ChatView(props: ChatViewProps) {
                                 canOperateThread={canOperateThread}
                                 reportedModelSelection={reportedModelSelection}
                                 multipleModelSelections={multipleModelSelections}
+                                supportsWorkerRequests={
+                                  serverConfig?.environment.capabilities.workerRequests === true
+                                }
                                 supportsMultipleModels={
                                   serverConfig?.environment.capabilities
                                     .requiredWorktreeBootstrap === true

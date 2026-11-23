@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 
+import { ProviderInstanceId } from "./providerInstance.ts";
 import { SnapShotSource } from "./chatAttachment.ts";
 
 import { AssistantCitation } from "./assistantCitations.ts";
@@ -311,10 +312,20 @@ export const GuestMessageAttribution = Schema.Struct({
 });
 export type GuestMessageAttribution = typeof GuestMessageAttribution.Type;
 
+export const ComposerWorkerRequest = Schema.Struct({
+  count: Schema.Literals([1, 2, 3]),
+  model: Schema.Union([
+    Schema.Literals(["inherit", "auto"]),
+    Schema.Struct({ instanceId: ProviderInstanceId, model: TrimmedNonEmptyString }),
+  ]),
+});
+export type ComposerWorkerRequest = typeof ComposerWorkerRequest.Type;
+
 /** Structured context riding on a user message. Undecodable records are dropped, not fatal. */
 export const OrchestrationMessageContext = Schema.Struct({
   version: Schema.Literal(1),
   guest: Schema.optional(GuestMessageAttribution),
+  workers: Schema.optionalKey(ComposerWorkerRequest),
   records: Schema.Array(Schema.Unknown)
     .check(
       Schema.isMaxLength(COMPOSER_CONTEXT_MAX_RECORDS),

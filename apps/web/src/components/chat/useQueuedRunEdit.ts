@@ -182,6 +182,7 @@ async function submitQueuedRunEdit(input: {
           attachments: uploads,
           context: {
             version: 1,
+            ...(editing.context?.workers && { workers: editing.context.workers }),
             records: [
               ...new Map(
                 [...keptRecords, ...newRecords].map(

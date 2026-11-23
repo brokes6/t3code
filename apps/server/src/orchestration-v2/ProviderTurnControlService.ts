@@ -469,6 +469,7 @@ export const layer: Layer.Layer<
                   projectComposerContextForProvider({
                     text: message.text,
                     records: message.context?.records ?? [],
+                    workers: message.context?.workers,
                   }),
                 ),
                 attachments: message.attachments,

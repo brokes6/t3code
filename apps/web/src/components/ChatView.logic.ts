@@ -1383,6 +1383,7 @@ export interface ComposerSendContents {
   readonly environmentContexts: ReadonlyArray<EnvironmentContextRecord>;
   /** The response the message replies to. `prompt` already leads with its reference. */
   readonly replyTo: ResponseContextRecord | null;
+  readonly workers?: OrchestrationMessageContext["workers"];
 }
 
 /**
@@ -1412,6 +1413,7 @@ export function snapshotComposerSend(contents: ComposerSendContents) {
     threadContexts: [...contents.threadContexts],
     environmentContexts: [...contents.environmentContexts],
     replyTo: contents.replyTo,
+    workers: contents.workers,
     messageText,
     /** What a failed send puts back in the composer: the reply returns above it, not in the text. */
     draftText: contents.replyTo

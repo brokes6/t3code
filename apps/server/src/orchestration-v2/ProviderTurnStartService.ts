@@ -1022,6 +1022,7 @@ export const layer: Layer.Layer<
         projectComposerContextForProvider({
           text: providerMessage.text,
           records: providerMessage.context?.records ?? [],
+          workers: providerMessage.context?.workers,
         }),
       );
       const slashCommand = isSlashCommandMessage(providerMessage);
