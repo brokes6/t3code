@@ -66,24 +66,25 @@ export function ComposerUsageFooter({
   return (
     <div className="@container/composer-usage mx-auto w-full max-w-(--chat-content-max-width)">
       <div
-        className="pointer-events-auto flex min-w-0 items-center justify-end gap-0.5 px-2 pt-1 text-xs tabular-nums empty:hidden"
+        className="pointer-events-auto flex min-w-0 flex-wrap items-center justify-between gap-x-2 px-2 pt-1 text-xs tabular-nums not-has-[button]:hidden"
         data-composer-context-control=""
       >
-        {showCost ? (
-          <CostItem
-            summary={summary}
-            hasMoreHistory={hasMoreHistory || partial}
-            environmentId={environmentId}
-          />
-        ) : null}
         {usage.contextWindow ? <ContextItem usage={usage.contextWindow} /> : null}
-        <LimitsItem
-          providerInstanceId={usage.providerInstanceId}
-          model={usage.model}
-          providers={usage.providers}
-          sources={usage.sources}
-          lowerPriority={showCost || usage.contextWindow !== null}
-        />
+        <div className="ms-auto flex min-w-0 items-center justify-end gap-0.5 empty:hidden">
+          {showCost ? (
+            <CostItem
+              summary={summary}
+              hasMoreHistory={hasMoreHistory || partial}
+              environmentId={environmentId}
+            />
+          ) : null}
+          <LimitsItem
+            providerInstanceId={usage.providerInstanceId}
+            model={usage.model}
+            providers={usage.providers}
+            sources={usage.sources}
+          />
+        </div>
       </div>
     </div>
   );
@@ -96,6 +97,7 @@ function UsageItem({
   children,
   open,
   onOpenChange,
+  align = "end",
 }: {
   readonly title: string;
   readonly label: string;
@@ -103,6 +105,7 @@ function UsageItem({
   readonly children: ReactNode;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
+  readonly align?: "start" | "end";
 }) {
   return (
     <Popover {...(open === undefined ? {} : { open })} {...(onOpenChange ? { onOpenChange } : {})}>
@@ -118,7 +121,7 @@ function UsageItem({
       <PopoverPopup
         {...composerFloatingLayerProps}
         side="top"
-        align="end"
+        align={align}
         width="sm"
         padding="compact"
       >
@@ -237,7 +240,9 @@ function CostItem({
           <>
             <CoinsIcon className="size-3.5" aria-hidden />
             {cost === null ? null : (
-              <span className="max-w-[12ch] min-w-[3ch] truncate text-end">{cost}</span>
+              <span className="hidden max-w-[12ch] min-w-[3ch] truncate text-end @min-[27rem]/composer-usage:inline">
+                {cost}
+              </span>
             )}
           </>
         }
@@ -330,7 +335,7 @@ function ContextItem({
       ? "text-error-foreground"
       : tone === "warning"
         ? "text-warning-foreground"
-        : null;
+        : undefined;
   return (
     <UsageItem
       title={title}
@@ -339,44 +344,22 @@ function ContextItem({
           ? gt("Context: {usedTokens} tokens used", { usedTokens: value })
           : gt("Context: {used}% used", { used })
       }
+      align="start"
       trigger={
         <>
-          <svg aria-hidden viewBox="0 0 14 14" fill="none" className="size-3.5">
-            <circle
-              cx="7"
-              cy="7"
-              r="5"
-              strokeWidth="1.5"
-              className="stroke-muted-foreground/30 dark:stroke-muted-foreground/20"
-            />
-            {used !== null && used > 0 ? (
-              <circle
-                cx="7"
-                cy="7"
-                r="5"
-                pathLength="100"
-                strokeWidth="1.5"
-                strokeDasharray={`${used} 100`}
-                transform="rotate(-90 7 7)"
-                className={
-                  tone === "error"
-                    ? "stroke-error"
-                    : tone === "warning"
-                      ? "stroke-warning"
-                      : "stroke-muted-foreground"
-                }
-              />
-            ) : null}
-            {tick !== null ? (
-              <path
-                d="M7 0.75v2.5"
-                strokeWidth="1"
-                transform={`rotate(${tick * 3.6} 7 7)`}
-                className="stroke-foreground/75"
-              />
-            ) : null}
-          </svg>
-          <span className={cn("min-w-[4ch] text-end", toneText)}>{value}</span>
+          <span className="hidden @min-[21rem]/composer-usage:inline">
+            {gt("Context", { $context: "context window row label" })}
+          </span>
+          {used !== null ? (
+            <span className="w-8 @min-[25rem]/composer-usage:w-11">
+              <UsageBar fill={used} tone={tone} tick={tick} color="var(--info)" accentTick />
+            </span>
+          ) : null}
+          <span className="text-foreground">
+            {formatContextWindowTokens(usage.usedTokens)}
+            {maxTokens === null ? "" : `/${formatContextWindowTokens(maxTokens)}`}
+          </span>
+          {used !== null ? <span className={toneText}>{value}</span> : null}
         </>
       }
     >
@@ -409,8 +392,7 @@ function LimitsItem({
   model,
   providers,
   sources,
-  lowerPriority,
-}: Omit<ThreadDetailsUsageInput, "contextWindow"> & { readonly lowerPriority: boolean }) {
+}: Omit<ThreadDetailsUsageInput, "contextWindow">) {
   const gt = useGT();
   const locale = useLocale();
   const m = useMessages();
@@ -425,55 +407,64 @@ function LimitsItem({
     label: "members" in window ? window.label : spendBudgetLabel(window, m),
     budget: "members" in window ? null : spendBudgetDetails(window, locale, m, now),
   }));
-  const primary = rows[0];
+  const fiveHour = rows.find(({ window }) =>
+    "members" in window
+      ? window.kind === "session" &&
+        window.members.some(({ window }) => window.windowDurationMins === 300)
+      : window.windowDurationMins === 300 && window.spend === undefined,
+  );
+  const weekly = rows.find(
+    ({ window }) => window.kind === "weekly" && ("members" in window || window.spend === undefined),
+  );
+  const primary = fiveHour ?? weekly ?? rows[0];
   if (primary === undefined && credits === undefined) return null;
   const title = gt("Usage limits");
   const value = (left: number) => gt("{percent}%", { percent: formatCount(left, locale) });
+  const visible = [
+    ...(fiveHour ? [{ row: fiveHour, duration: "5h", color: "stroke-success" }] : []),
+    ...(weekly && weekly !== fiveHour
+      ? [{ row: weekly, duration: "7d", color: "stroke-warning" }]
+      : []),
+  ];
+  const extra = rows.length - (visible.length || (primary ? 1 : 0));
   return (
-    <div className={cn("min-w-0", lowerPriority && "@max-[12rem]/composer-usage:hidden")}>
+    <div className="min-w-0">
       <UsageItem
         title={title}
         label={
-          primary
-            ? gt("{label}: {left}% left", { label: primary.label, left: primary.left })
-            : title
+          (visible.length > 0 ? visible.map(({ row }) => row) : primary ? [primary] : [])
+            .map(({ label, left }) => gt("{label}: {left}% left", { label, left }))
+            .join(" · ") || title
         }
         trigger={
           <>
-            <GaugeIcon className="size-3.5" aria-hidden />
-            {primary ? (
-              <span className="hidden max-w-[12ch] truncate @min-[31rem]/composer-usage:inline">
-                {primary.label}
-              </span>
-            ) : null}
-            {primary ? (
-              <span
-                className={cn(
-                  "min-w-[4ch] text-end",
-                  primary.budget?.over && "text-error-foreground",
-                )}
-              >
-                {value(primary.left)}
-              </span>
-            ) : null}
-            {rows[1] ? (
-              <span className="hidden items-center gap-1 @min-[21rem]/composer-usage:inline-flex">
-                <span aria-hidden className="px-0.5 text-muted-foreground/60">
-                  ·
+            {visible.length === 0 ? (
+              <>
+                <GaugeIcon className="size-3.5" aria-hidden />
+                {primary ? (
+                  <>
+                    <span className="hidden max-w-[12ch] truncate @min-[31rem]/composer-usage:inline">
+                      {primary.label}
+                    </span>
+                    <span className="text-foreground">{value(primary.left)}</span>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              visible.map(({ row, duration, color }, index) => (
+                <span key={duration} className="inline-flex items-center gap-1">
+                  {index > 0 ? (
+                    <span aria-hidden className="me-0.5 text-muted-foreground/60">
+                      ·
+                    </span>
+                  ) : null}
+                  <LimitRing left={row.left} tick={row.tick} color={color} />
+                  <span>{duration}</span>
+                  <span className="text-foreground">{value(row.left)}</span>
                 </span>
-                <span className="hidden max-w-[12ch] truncate @min-[31rem]/composer-usage:inline">
-                  {rows[1].label}
-                </span>
-                <span
-                  className={cn(
-                    "min-w-[4ch] text-end",
-                    rows[1].budget?.over && "text-error-foreground",
-                  )}
-                >
-                  {value(rows[1].left)}
-                </span>
-              </span>
-            ) : null}
+              ))
+            )}
+            {extra > 0 ? <span>+{formatCount(extra, locale)}</span> : null}
           </>
         }
       >
@@ -539,5 +530,43 @@ function LimitsItem({
         ) : null}
       </UsageItem>
     </div>
+  );
+}
+
+function LimitRing({
+  left,
+  tick,
+  color,
+}: {
+  readonly left: number;
+  readonly tick: number | null;
+  readonly color: string;
+}) {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" fill="none" className="size-3.5 shrink-0">
+      <circle cx="8" cy="8" r="6" strokeWidth="1.75" className="stroke-muted-foreground/30" />
+      {left > 0 ? (
+        <circle
+          cx="8"
+          cy="8"
+          r="6"
+          pathLength="100"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeDasharray={`${left} 100`}
+          transform="rotate(-90 8 8)"
+          className={left <= 10 ? "stroke-error" : color}
+        />
+      ) : null}
+      {tick !== null ? (
+        <circle
+          cx="8"
+          cy="2"
+          r="1.35"
+          transform={`rotate(${tick * 3.6} 8 8)`}
+          className="fill-foreground stroke-background"
+        />
+      ) : null}
+    </svg>
   );
 }

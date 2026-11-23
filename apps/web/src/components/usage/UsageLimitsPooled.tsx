@@ -312,7 +312,6 @@ function PoolSegment({
   readonly color: string;
   readonly now: number;
   readonly index: number;
-  readonly showAccountName: boolean;
 }) {
   return account.redeem ? (
     <RedeemableSegment account={account} redeemAt={account.redeem} {...props} />
@@ -359,13 +358,11 @@ function SegmentTriggers({
   color,
   now,
   index,
-  showAccountName,
 }: SegmentPayload & {
   readonly refillPercent: number;
   readonly color: string;
   readonly now: number;
   readonly index: number;
-  readonly showAccountName: boolean;
 }) {
   const popover = use(SegmentPopoverContext) ?? undefined;
   const payload: SegmentPayload = { account, window, reset, redeem };
@@ -373,7 +370,6 @@ function SegmentTriggers({
   const timeLeft = paceRemainingPercent(window, now);
   const m = useMessages();
   const resetsIn = formatResetsIn(window, now, m);
-  const refillIn = formatResetsIn(window, now, m, "refill");
   const credits = account.limits.resetCredits?.availableCount ?? 0;
   const gt = useGT();
   const segmentLabel = [
@@ -404,58 +400,37 @@ function SegmentTriggers({
             type="button"
             style={{ gridColumn: index, gridRow: 1 }}
             aria-label={segmentLabel}
-            className={cn(
-              "grid min-h-9 min-w-0 cursor-pointer content-center gap-1.5 rounded-md px-1 text-start outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-[popup-open]:ring-1 data-[popup-open]:ring-inset data-[popup-open]:ring-border",
-              !showAccountName && "-mx-1",
-            )}
+            className="relative flex h-5 min-w-0 cursor-pointer items-center justify-center overflow-hidden rounded-md bg-foreground/8 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-[popup-open]:ring-1 data-[popup-open]:ring-inset data-[popup-open]:ring-border"
           />
         }
       >
-        {showAccountName ? (
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 rounded-md opacity-35"
+          style={{ width: `${remaining}%`, backgroundColor: color }}
+        />
+        {reset && refillPercent > 0 && remaining < 100 ? (
           <span
             aria-hidden
-            className="text-center text-2xs font-medium text-muted-foreground tabular-nums @2xl/pool:hidden"
-          >
-            {index}
-          </span>
+            className="absolute inset-y-0 right-0 opacity-25"
+            style={{
+              width: `${Math.min(100 - remaining, refillPercent)}%`,
+              backgroundImage: `repeating-linear-gradient(135deg, transparent 0 3px, ${color} 3px 4px)`,
+            }}
+          />
         ) : null}
-        {showAccountName || refillIn || credits ? (
+        <span aria-hidden className="relative text-2xs font-medium text-foreground/80 tabular-nums">
+          {index}
+        </span>
+        {timeLeft !== null ? (
           <span
-            className={cn(
-              "min-w-0 items-center gap-1.5 text-xs tabular-nums",
-              showAccountName ? "hidden @2xl/pool:flex" : "flex",
-            )}
-          >
-            {showAccountName ? (
-              <>
-                <AccountName account={account} className="min-w-0 truncate font-medium" />
-                <span className="shrink-0 font-medium">{remaining}%</span>
-              </>
-            ) : null}
-            {resetsIn || credits ? (
-              <span className="ms-auto flex min-w-0 items-center gap-1.5 text-muted-foreground">
-                {refillIn ? <span className="min-w-0 truncate">{refillIn}</span> : null}
-                {credits ? (
-                  <span aria-hidden className="inline-flex shrink-0 items-center gap-0.5">
-                    <TicketIcon className="size-3" aria-hidden />
-                    {credits}
-                  </span>
-                ) : null}
-              </span>
-            ) : null}
-          </span>
+            aria-hidden
+            className="absolute inset-y-0.5 w-0.5 -translate-x-1/2 rounded-full bg-foreground ring-2 ring-background"
+            style={{ left: `clamp(3px, ${timeLeft}%, calc(100% - 3px))` }}
+          />
         ) : null}
-        <UsageBar
-          fill={remaining}
-          tick={timeLeft}
-          tone={limitTone(remaining)}
-          color={color}
-          refill={reset ? refillPercent : 0}
-        />
       </PopoverTrigger>
-      {showAccountName ? (
-        <LegendRow payload={payload} color={color} now={now} index={index} />
-      ) : null}
+      <LegendRow payload={payload} color={color} now={now} index={index} />
     </>
   );
 }
@@ -484,7 +459,7 @@ function LegendRow({
       payload={payload}
       style={{ gridColumn: "1 / -1", gridRow: index + 1 }}
       render={<Button variant="ghost" size="compact" />}
-      className="min-w-0 @2xl/pool:hidden"
+      className="min-w-0"
     >
       <span className="relative inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-3xs leading-none font-semibold text-foreground/80 tabular-nums">
         <span
@@ -497,14 +472,14 @@ function LegendRow({
       </span>
       <AccountName account={account} className="min-w-0 truncate font-medium text-foreground" />
       <span className="shrink-0 font-semibold text-foreground tabular-nums">{remaining}%</span>
-      <span className="ms-auto flex shrink-0 items-center gap-1.5 text-2xs text-muted-foreground tabular-nums">
-        {resetsIn ?? ""}
+      <span className="ms-auto flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground tabular-nums">
+        {resetsIn ? <span className="truncate">{resetsIn}</span> : null}
         {credits ? (
           <>
             {resetsIn ? <span aria-hidden>·</span> : null}
             <span
               aria-hidden
-              className="inline-flex items-center gap-0.5 font-semibold text-foreground"
+              className="inline-flex shrink-0 items-center gap-0.5 font-semibold text-foreground"
             >
               <TicketIcon className="size-3" aria-hidden />
               {credits}
@@ -550,13 +525,12 @@ function PoolBar({
               color={normalizeProviderAccentColor(member.account.accentColor) ?? color}
               now={now}
               index={position + 1}
-              showAccountName={pool.columns.length > 1}
             />
           ) : pool.kind === "monthly" && member.account.limits.zeroSpendCap ? (
             <div
               key={member.account.key}
               style={{ gridColumn: position + 1, gridRow: 1 }}
-              className="flex min-h-9 min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-md border border-dashed border-border text-3xs whitespace-nowrap text-muted-foreground @2xl/pool:justify-start @2xl/pool:px-2 @2xl/pool:text-xs"
+              className="flex h-5 min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-md border border-dashed border-border text-3xs whitespace-nowrap text-muted-foreground @2xl/pool:justify-start @2xl/pool:px-2 @2xl/pool:text-xs"
             >
               <AccountName
                 account={member.account}

@@ -14,14 +14,14 @@ export function UsageBar({
   tick,
   muted = false,
   color,
-  refill = 0,
+  accentTick = false,
 }: {
   readonly fill: number;
   readonly tone: UsageTone;
   readonly tick: number | null;
   readonly muted?: boolean;
   readonly color?: string;
-  readonly refill?: number;
+  readonly accentTick?: boolean;
 }) {
   return (
     <span aria-hidden className="relative block h-1.5">
@@ -47,16 +47,13 @@ export function UsageBar({
             }}
           />
         ) : null}
-        {fill < 100 && refill > 0 ? (
-          <span
-            className="absolute inset-y-0 right-0 bg-foreground/12"
-            style={{ width: `${Math.min(100 - fill, refill)}%` }}
-          />
-        ) : null}
       </span>
       {tick !== null ? (
         <span
-          className="absolute -inset-y-0.5 w-0.5 -translate-x-1/2 rounded-full bg-foreground ring-1 ring-background"
+          className={cn(
+            "absolute -inset-y-0.5 w-0.5 -translate-x-1/2 rounded-full ring-1 ring-background",
+            accentTick ? "bg-warning" : "bg-foreground",
+          )}
           style={{ left: `clamp(1px, ${tick}%, calc(100% - 1px))` }}
         />
       ) : null}
