@@ -825,6 +825,12 @@ export function ProviderInstanceCard({
     enabled && liveProvider?.auth.status === "authenticated"
       ? (providerAuthLabel(liveProvider.auth, m) ?? null)
       : null;
+  // Codex and Claude report an official account's own limits, so a spend budget only suits keys and endpoints.
+  const reportsAccountLimits =
+    (instance.driver === "codex" || instance.driver === "claude") &&
+    liveProvider?.auth.status === "authenticated" &&
+    liveProvider.auth.endpoint === undefined &&
+    !["apiKey", "customEndpoint", "bedrock"].includes(liveProvider.auth.type ?? "");
   const versionLabel = getProviderVersionLabel(liveProvider?.version);
   const versionAdvisory = getProviderVersionAdvisoryPresentation(
     liveProvider?.versionAdvisory,
@@ -1392,15 +1398,17 @@ export function ProviderInstanceCard({
         />
       </SettingsSection>
 
-      <ProviderSpendBudgetSetting
-        id={`provider-instance-${instanceId}-spend-budget`}
-        budget={instance.spendBudget}
-        disabled={readOnly || !canWriteSettings}
-        onSave={(budget) => {
-          const { spendBudget: _previousBudget, ...rest } = instance;
-          return onUpdate(budget === undefined ? rest : { ...rest, spendBudget: budget });
-        }}
-      />
+      {reportsAccountLimits && instance.spendBudget === undefined ? null : (
+        <ProviderSpendBudgetSetting
+          id={`provider-instance-${instanceId}-spend-budget`}
+          budget={instance.spendBudget}
+          disabled={readOnly || !canWriteSettings}
+          onSave={(budget) => {
+            const { spendBudget: _previousBudget, ...rest } = instance;
+            return onUpdate(budget === undefined ? rest : { ...rest, spendBudget: budget });
+          }}
+        />
+      )}
 
       {setup || environmentFields.length > 0 ? (
         <SettingsSection title={gt("Setup")}>
