@@ -620,13 +620,24 @@ export function useComposerSend(input: ComposerSendInput) {
       answeringQuestion || queuedRunEdit.isEditing
         ? undefined
         : useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.workers;
-    if (
-      workers &&
-      readEnvironmentPresentation(environmentId)?.serverConfig?.environment.capabilities
-        .workerRequests !== true
-    ) {
-      setThreadError(activeThread.id, m(msg("This environment doesn't support worker requests.")));
-      return;
+    if (workers) {
+      const capabilities =
+        readEnvironmentPresentation(environmentId)?.serverConfig?.environment.capabilities;
+      if (capabilities?.workerRequests !== true) {
+        setThreadError(
+          activeThread.id,
+          m(msg("This environment doesn't support worker requests.")),
+        );
+        return;
+      }
+      const max = capabilities.maxRequestedWorkers ?? 3;
+      if (workers.count > max) {
+        setThreadError(
+          activeThread.id,
+          m(msg("This environment supports up to {max} workers.", { max })),
+        );
+        return;
+      }
     }
     if (workers && (sideChatCommand || sendCtx?.multipleModelSelections != null)) {
       setThreadError(activeThread.id, m(msg("Workers require a single main agent in this chat.")));

@@ -383,6 +383,7 @@ export interface ChatComposerProps {
   multipleModelSelections: ReadonlyArray<ModelSelection> | null;
   supportsMultipleModels: boolean;
   supportsWorkerRequests?: boolean;
+  maxRequestedWorkers?: number;
   onMultipleModelSelectionsChange: React.Dispatch<
     React.SetStateAction<ReadonlyArray<ModelSelection> | null>
   >;
@@ -3702,21 +3703,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       data-chat-composer-form="true"
       {...threadContextDropTargetProps()}
     >
-      {workerPickerOpen ? (
-        <ComposerWorkerPicker
-          request={composerDraft.workers}
-          providers={providerInstanceEntries}
-          onClose={() => {
-            setWorkerPickerOpen(false);
-            scheduleComposerFocus();
-          }}
-          onApply={(workers) => {
-            useComposerDraftStore.getState().setWorkers(composerDraftTarget, workers);
-            setWorkerPickerOpen(false);
-            scheduleComposerFocus();
-          }}
-        />
-      ) : null}
+      <ComposerWorkerPicker
+        open={workerPickerOpen}
+        maxCount={props.maxRequestedWorkers ?? 3}
+        anchor={composerSurfaceRef}
+        request={composerDraft.workers}
+        providers={providerInstanceEntries}
+        onClose={() => setWorkerPickerOpen(false)}
+        onApply={(workers) => {
+          useComposerDraftStore.getState().setWorkers(composerDraftTarget, workers);
+          setWorkerPickerOpen(false);
+        }}
+      />
       <ComposerBanner.Dock>
         <ComposerBanner.Column>
           <ComposerBannerStack items={shelfItems} />

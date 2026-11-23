@@ -312,8 +312,10 @@ export const GuestMessageAttribution = Schema.Struct({
 });
 export type GuestMessageAttribution = typeof GuestMessageAttribution.Type;
 
+export const MAX_COMPOSER_WORKERS = 20;
+
 export const ComposerWorkerRequest = Schema.Struct({
-  count: Schema.Literals([1, 2, 3]),
+  count: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_COMPOSER_WORKERS)),
   model: Schema.Union([
     Schema.Literals(["inherit", "auto"]),
     Schema.Struct({ instanceId: ProviderInstanceId, model: TrimmedNonEmptyString }),

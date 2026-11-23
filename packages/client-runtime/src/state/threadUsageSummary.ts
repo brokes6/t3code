@@ -1,6 +1,8 @@
 import type {
   OrchestrationV2ProviderThread,
   OrchestrationV2ProviderTurn,
+  OrchestrationV2RunAttempt,
+  RunId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
@@ -42,6 +44,14 @@ function deriveLastTurn(turn: OrchestrationV2ProviderTurn) {
 export function deriveThreadUsageSummary(
   turns: readonly OrchestrationV2ProviderTurn[],
   activeProviderThread?: Pick<OrchestrationV2ProviderThread, "id"> | null,
+  workers?: {
+    readonly attempts: readonly OrchestrationV2RunAttempt[];
+    readonly groups: readonly {
+      parentRunId: RunId | null;
+      turns: readonly OrchestrationV2ProviderTurn[];
+      remote?: boolean;
+    }[];
+  },
 ) {
   let totalCostUsd: number | null = null;
   let hasUnpricedTurns = false;
@@ -51,9 +61,10 @@ export function deriveThreadUsageSummary(
   let lastTurn: OrchestrationV2ProviderTurn | null = null;
   let lastTurnAt = -Infinity;
 
-  for (const turn of turns) {
+  const includeCost = (turn: OrchestrationV2ProviderTurn, offerPriceOverride = true) => {
     const usage = turn.turnTokenUsage;
-    if (turn.status === "pending" || turn.status === "running" || usage?.localCommand) continue;
+    if (turn.status === "pending" || turn.status === "running" || usage?.localCommand)
+      return undefined;
     const model = turn.model ?? usage?.models?.[0] ?? null;
     const cost = turnCost(turn);
     if (cost === null) {
@@ -63,7 +74,12 @@ export function deriveThreadUsageSummary(
       } else if (turn.startedAt !== null || usage !== undefined) {
         hasUnpricedTurns = true;
       }
-      if (model !== null && turn.costSource === "unpriced" && usage?.usageStatus === "complete") {
+      if (
+        offerPriceOverride &&
+        model !== null &&
+        turn.costSource === "unpriced" &&
+        usage?.usageStatus === "complete"
+      ) {
         unpricedModels.add(model);
       }
     } else {
@@ -71,6 +87,13 @@ export function deriveThreadUsageSummary(
       costByModel.set(model, (costByModel.get(model) ?? 0) + cost);
     }
 
+    return cost;
+  };
+
+  for (const turn of turns) {
+    const cost = includeCost(turn);
+    if (cost === undefined) continue;
+    const usage = turn.turnTokenUsage;
     if (
       (activeProviderThread != null && activeProviderThread.id !== turn.providerThreadId) ||
       (cost === null && (usage === undefined || usage.usageStatus === "unavailable"))
@@ -84,6 +107,24 @@ export function deriveThreadUsageSummary(
     }
   }
 
+  const lastRunId =
+    lastTurn === null
+      ? undefined
+      : workers?.attempts.find(
+          (attempt) =>
+            attempt.providerTurnId === lastTurn?.id || attempt.id === lastTurn?.runAttemptId,
+        )?.runId;
+  let lastWorkerCost: number | null = null;
+  for (const group of workers?.groups ?? []) {
+    for (const turn of group.turns) {
+      const cost = includeCost(turn, !group.remote);
+      if (cost != null && lastRunId !== undefined && group.parentRunId === lastRunId) {
+        lastWorkerCost = (lastWorkerCost ?? 0) + cost;
+      }
+    }
+  }
+  const last = lastTurn === null ? null : deriveLastTurn(lastTurn);
+
   return {
     totalCostUsd,
     costByModel: [...costByModel]
@@ -92,6 +133,9 @@ export function deriveThreadUsageSummary(
     hasUnpricedTurns,
     hasUntrackedTurns,
     unpricedModels: [...unpricedModels].sort(),
-    lastTurn: lastTurn === null ? null : deriveLastTurn(lastTurn),
+    lastTurn:
+      last === null || lastWorkerCost === null
+        ? last
+        : { ...last, costUsd: (last.costUsd ?? 0) + lastWorkerCost, workerCostUsd: lastWorkerCost },
   };
 }

@@ -3850,6 +3850,9 @@ export default function ChatView(props: ChatViewProps) {
                                 canOperateThread={canOperateThread}
                                 reportedModelSelection={reportedModelSelection}
                                 multipleModelSelections={multipleModelSelections}
+                                maxRequestedWorkers={
+                                  serverConfig?.environment.capabilities.maxRequestedWorkers ?? 3
+                                }
                                 supportsWorkerRequests={
                                   serverConfig?.environment.capabilities.workerRequests === true
                                 }
@@ -4084,6 +4087,8 @@ export default function ChatView(props: ChatViewProps) {
                         <ComposerUsageFooter
                           usage={threadUsage}
                           turns={serverProjection?.providerTurns ?? EMPTY_PROVIDER_TURNS}
+                          attempts={serverProjection?.attempts ?? []}
+                          threadId={activeThread.id}
                           activeProviderThread={activeProviderThread}
                           hasMoreHistory={serverThreadHistory.hasMoreHistory}
                           environmentId={activeThread.environmentId}

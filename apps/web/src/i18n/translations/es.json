@@ -1478,6 +1478,7 @@
   "b02de967ba499b82": "Modelo del agente auxiliar no disponible",
   "1d6805f08be59136": "{started}/{count} agentes auxiliares iniciados",
   "9e917a477c7d1d22": "Este entorno no admite solicitudes de agentes auxiliares.",
+  "89b80c259c466882": "Este entorno admite hasta {max} agentes auxiliares.",
   "7342bfc328008926": "En curso",
   "353b08f4363dbb2c": "Pendiente",
   "eac06da142bf21b5": "Pasos de la tarea",

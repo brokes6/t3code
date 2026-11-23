@@ -1478,6 +1478,7 @@
   "b02de967ba499b82": "Worker-Modell nicht verfügbar",
   "1d6805f08be59136": "{started}/{count} Worker gestartet",
   "9e917a477c7d1d22": "Diese Umgebung unterstützt keine Worker-Anfragen.",
+  "89b80c259c466882": "Diese Umgebung unterstützt bis zu {max} Worker.",
   "7342bfc328008926": "Läuft",
   "353b08f4363dbb2c": "Ausstehend",
   "eac06da142bf21b5": "Aufgabenschritte",

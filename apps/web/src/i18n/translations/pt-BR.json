@@ -1478,6 +1478,7 @@
   "b02de967ba499b82": "Modelo do agente auxiliar indisponível",
   "1d6805f08be59136": "{started}/{count} agentes auxiliares iniciados",
   "9e917a477c7d1d22": "Este ambiente não oferece suporte a solicitações de agentes auxiliares.",
+  "89b80c259c466882": "Este ambiente oferece suporte a até {max} agentes auxiliares.",
   "7342bfc328008926": "Em andamento",
   "353b08f4363dbb2c": "Pendente",
   "eac06da142bf21b5": "Etapas da tarefa",

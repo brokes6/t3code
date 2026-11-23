@@ -1478,6 +1478,7 @@
   "b02de967ba499b82": "Worker-modellen är inte tillgänglig",
   "1d6805f08be59136": "{started}/{count} workers startade",
   "9e917a477c7d1d22": "Den här miljön stöder inte worker-förfrågningar.",
+  "89b80c259c466882": "Den här miljön stöder upp till {max} workers.",
   "7342bfc328008926": "Pågår",
   "353b08f4363dbb2c": "Väntar",
   "eac06da142bf21b5": "Uppgiftssteg",

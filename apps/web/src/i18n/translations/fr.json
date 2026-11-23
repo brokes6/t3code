@@ -1478,6 +1478,7 @@
   "b02de967ba499b82": "Modèle de l’agent auxiliaire indisponible",
   "1d6805f08be59136": "{started}/{count} agents auxiliaires démarrés",
   "9e917a477c7d1d22": "Cet environnement ne prend pas en charge les demandes d’agents auxiliaires.",
+  "89b80c259c466882": "Cet environnement prend en charge jusqu’à {max} agents auxiliaires.",
   "7342bfc328008926": "En cours",
   "353b08f4363dbb2c": "En attente",
   "eac06da142bf21b5": "Étapes de la tâche",

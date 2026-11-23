@@ -3,6 +3,8 @@ import {
   type EnvironmentId,
   type OrchestrationV2ProviderThread,
   type OrchestrationV2ProviderTurn,
+  type OrchestrationV2RunAttempt,
+  type ThreadId,
 } from "@t3tools/contracts";
 import { deriveThreadUsageSummary } from "@t3tools/client-runtime/state/usage";
 import { formatDuration as formatTurnDuration } from "@t3tools/shared/orchestrationTimingCopy";
@@ -12,6 +14,7 @@ import { useGT, useLocale, useMessages } from "gt-react";
 import { CoinsIcon, GaugeIcon } from "lucide-react";
 import { Fragment, lazy, Suspense, useState, type ReactNode } from "react";
 
+import { useWorkerUsage } from "../../state/entities";
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { contextWindowDisplay, formatContextWindowTokens } from "../../lib/contextWindow";
 import { cn } from "../../lib/utils";
@@ -42,17 +45,22 @@ const UsagePriceOverrides = lazy(() =>
 export function ComposerUsageFooter({
   usage,
   turns,
+  attempts,
+  threadId,
   activeProviderThread,
   hasMoreHistory,
   environmentId,
 }: {
   readonly usage: ThreadDetailsUsageInput;
   readonly turns: readonly OrchestrationV2ProviderTurn[];
+  readonly attempts: readonly OrchestrationV2RunAttempt[];
+  readonly threadId: ThreadId;
   readonly activeProviderThread: OrchestrationV2ProviderThread | undefined;
   readonly hasMoreHistory: boolean;
   readonly environmentId: EnvironmentId;
 }) {
-  const summary = deriveThreadUsageSummary(turns, activeProviderThread);
+  const { groups, partial } = useWorkerUsage({ environmentId, threadId });
+  const summary = deriveThreadUsageSummary(turns, activeProviderThread, { attempts, groups });
   const showCost =
     summary.totalCostUsd !== null || summary.lastTurn !== null || summary.unpricedModels.length > 0;
   return (
@@ -64,7 +72,7 @@ export function ComposerUsageFooter({
         {showCost ? (
           <CostItem
             summary={summary}
-            hasMoreHistory={hasMoreHistory}
+            hasMoreHistory={hasMoreHistory || partial}
             environmentId={environmentId}
           />
         ) : null}
@@ -166,6 +174,13 @@ function CostItem({
           {
             label: gt("Cost"),
             value: lastTurn.costUsd === null ? null : formatUsd(lastTurn.costUsd, locale),
+          },
+          {
+            label: gt("Workers"),
+            value:
+              "workerCostUsd" in lastTurn && typeof lastTurn.workerCostUsd === "number"
+                ? formatUsd(lastTurn.workerCostUsd, locale)
+                : null,
           },
           {
             label: gt("Input tokens"),

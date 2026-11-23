@@ -1,5 +1,6 @@
 import {
   EnvironmentId,
+  MAX_COMPOSER_WORKERS,
   ORCHESTRATION_PROTOCOL_VERSION,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   type ExecutionEnvironmentDescriptor,
@@ -236,6 +237,7 @@ export const make = Effect.gen(function* () {
       vcsBranchStatus: true,
       inlineMessageContext: true,
       workerRequests: true,
+      maxRequestedWorkers: MAX_COMPOSER_WORKERS,
       requiredWorktreeBootstrap: true,
       threadSettlement: true,
       threadAutoSettlement: true,

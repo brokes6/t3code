@@ -1478,6 +1478,7 @@
   "b02de967ba499b82": "Worker model unavailable",
   "1d6805f08be59136": "{started}/{count} workers started",
   "9e917a477c7d1d22": "This environment doesn't support worker requests.",
+  "89b80c259c466882": "This environment supports up to {max} workers.",
   "7342bfc328008926": "Running",
   "353b08f4363dbb2c": "Pending",
   "eac06da142bf21b5": "Task steps",

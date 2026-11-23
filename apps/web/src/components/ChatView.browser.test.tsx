@@ -6,7 +6,11 @@ import {
   NodeId,
   ORCHESTRATION_V2_WS_METHODS,
   PlanId,
+  ProviderDriverKind,
   ProviderInstanceId,
+  ProviderThreadId,
+  ProviderTurnId,
+  RunAttemptId,
   RunId,
   ThreadId,
   WS_METHODS,
@@ -23,6 +27,7 @@ import {
 import type * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
+import * as DateTime from "effect/DateTime";
 import { expect, it, vi } from "vite-plus/test";
 import { cdp, page, userEvent } from "vite-plus/test/browser";
 
@@ -52,6 +57,7 @@ import {
   emitThreadShell,
   hasPendingAssetUrl,
   installFakeEnvironment,
+  isThreadSubscribed,
   rejectPendingCommand,
   threadWithHistory,
   threadWithQuestion,
@@ -496,13 +502,33 @@ it("configures workers from the slash menu and sends the selection with the mess
   await editor.click();
   await insertText("/worker");
   await userEvent.keyboard("{Enter}");
-  const dialog = page.getByRole("dialog", { name: "Add workers" });
-  await dialog.getByRole("button", { name: "2", exact: true }).click();
-  const model = dialog.getByRole("combobox", { name: "Worker model" });
+  const picker = page.getByRole("dialog", { name: "Add workers" });
+  await expect.element(picker).toBeVisible();
+  await expect.element(picker).not.toHaveAttribute("aria-modal", "true");
+  await vi.waitFor(() =>
+    expect(picker.element().getBoundingClientRect().bottom).toBeLessThan(
+      editor.element().getBoundingClientRect().top,
+    ),
+  );
+  await editor.click();
+  await expect.element(picker).not.toBeInTheDocument();
+  await insertText("/worker");
+  await userEvent.keyboard("{Enter}");
+  const count = picker.getByRole("slider", { name: "Workers" });
+  await count.click();
+  await userEvent.keyboard("{Home}{ArrowRight}");
+  await expect.element(count).toHaveValue("2");
+  await userEvent.keyboard("{End}");
+  const customCount = picker.getByRole("spinbutton", { name: "Workers" });
+  const apply = picker.getByRole("button", { name: "Apply to this message" });
+  await customCount.fill("21");
+  await expect.element(apply).toBeDisabled();
+  await customCount.fill("5");
+  const model = picker.getByRole("combobox", { name: "Worker model" });
   await expect.element(model).toHaveTextContent("Same as main agent");
   await model.click();
   await page.getByRole("option", { name: /GPT-5\.5/ }).click();
-  await dialog.getByRole("button", { name: "Apply to this message" }).click();
+  await apply.click();
   await expect
     .element(page.getByRole("button", { name: "Remove worker configuration" }))
     .toBeVisible();
@@ -515,13 +541,112 @@ it("configures workers from the slash menu and sends the selection with the mess
       expect.objectContaining({
         type: "message.dispatch",
         text: "Implement the feature",
-        context: { version: 1, records: [], workers: { count: 2, model: workerModel } },
+        context: { version: 1, records: [], workers: { count: 5, model: workerModel } },
       }),
     ),
   );
   await expect
     .element(page.getByRole("button", { name: "Remove worker configuration" }))
     .not.toBeInTheDocument();
+});
+
+it("includes a delegated worker in the composer cost and the parent turn", async () => {
+  const style = document.createElement("style");
+  style.textContent = stylesheet;
+  document.head.append(style);
+  using _style = { [Symbol.dispose]: () => style.remove() };
+  await page.viewport(1280, 800);
+  const thread = threadWithHistory("worker-cost-parent", 1);
+  const worker = threadWithHistory("worker-cost-child", 1);
+  using _environment = installFakeEnvironment([thread, worker]);
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${thread.id}`] }),
+  );
+  await router.load();
+  await using _app = await render(<AppRoot router={router} />, {
+    // AppRoot brings its own router.
+    router: false,
+  });
+  await expect.element(page.getByTestId("composer-editor")).toBeVisible();
+
+  const now = DateTime.makeUnsafe("2026-03-17T19:12:28.000Z");
+  const runId = RunId.make("worker-cost-parent-run-0");
+  const nodeId = NodeId.make("worker-cost-node");
+  const providerInstanceId = ProviderInstanceId.make("codex");
+  const providerThreadId = ProviderThreadId.make("worker-cost-provider");
+  const attempt = {
+    id: RunAttemptId.make("worker-cost-attempt"),
+    runId,
+    attemptOrdinal: 1,
+    rootNodeId: nodeId,
+    providerInstanceId,
+    providerThreadId,
+    providerTurnId: ProviderTurnId.make("worker-cost-turn"),
+    reason: "initial",
+    status: "completed",
+    startedAt: now,
+    completedAt: now,
+  } as const;
+  const turn = {
+    id: attempt.providerTurnId,
+    providerThreadId,
+    nodeId,
+    runAttemptId: attempt.id,
+    nativeTurnRef: null,
+    ordinal: 1,
+    status: "completed",
+    startedAt: now,
+    completedAt: now,
+    costUsd: 1.25,
+    costSource: "modelPriced",
+    model: "gpt-5.4",
+  } as const;
+  await emitThreadEvent(thread.id, { type: "run-attempt.updated", payload: attempt });
+  await emitThreadEvent(thread.id, { type: "provider-turn.updated", payload: turn });
+  await emitThreadEvent(thread.id, {
+    type: "subagent.updated",
+    payload: {
+      id: NodeId.make("worker-cost-subagent"),
+      threadId: thread.id,
+      runId,
+      parentNodeId: nodeId,
+      origin: "app_owned",
+      createdBy: "agent",
+      driver: ProviderDriverKind.make("codex"),
+      providerInstanceId,
+      providerThreadId: null,
+      childThreadId: worker.id,
+      nativeTaskRef: null,
+      prompt: "Check the change",
+      title: "Check the change",
+      model: "gpt-5.5",
+      status: "completed",
+      result: "Done",
+      startedAt: now,
+      completedAt: now,
+      updatedAt: now,
+    },
+  });
+  await vi.waitFor(() => expect(isThreadSubscribed(worker.id)).toBe(true));
+  await emitThreadEvent(worker.id, {
+    type: "provider-turn.updated",
+    payload: {
+      ...turn,
+      id: ProviderTurnId.make("worker-cost-child-turn"),
+      runAttemptId: null,
+      model: "gpt-5.5",
+      costUsd: 2,
+    },
+  });
+
+  await page.getByRole("button", { name: /cost:.*3\.25/i }).click();
+  const costs = page.getByRole("dialog", { name: /turn cost|Thread cost/ });
+  await expect.element(costs.getByText("gpt-5.5", { exact: true })).toBeVisible();
+  await expect.element(costs.getByText("Workers", { exact: true })).toBeVisible();
 });
 
 it("a new draft does not load its reserved thread before the server lists it", async () => {

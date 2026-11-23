@@ -26,6 +26,7 @@ import type {
   OrchestrationV2RemoteTaskChild,
   OrchestrationV2ThreadShell,
   NodeId,
+  RunId,
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
@@ -206,6 +207,72 @@ export function useThreadUpdatedAt(ref: ScopedThreadRef | null): DateTime.Utc | 
   return useAtomValue(
     ref === null ? EMPTY_UPDATED_AT_ATOM : environmentThreadDetails.updatedAtAtom(ref),
   );
+}
+
+const workerUsageAtomFamily = Atom.family((key: string) => {
+  const ref = parseThreadKey(key);
+  return Atom.make((get) => {
+    const root = get(environmentThreadDetails.quietThreadAtom(ref))?.projection;
+    const groups: Array<{
+      parentRunId: RunId | null;
+      turns: ThreadStructure["providerTurns"];
+      remote: boolean;
+    }> = [];
+    if (!root?.subagents.some((agent) => agent.origin === "app_owned")) {
+      return { groups, partial: false };
+    }
+
+    const visited = new Set([key]);
+    const seenTurns = new Map<EnvironmentId, Set<string>>([
+      [ref.environmentId, new Set(root.providerTurns.map(({ id }) => id))],
+    ]);
+    let partial = false;
+    const collect = (
+      source: ScopedThreadRef,
+      agents: ThreadStructure["subagents"],
+      inheritedRunId?: RunId | null,
+    ) => {
+      for (const agent of agents) {
+        if (agent.origin !== "app_owned") continue;
+        const child =
+          agent.remoteChild ??
+          (agent.childThreadId === null
+            ? null
+            : { environmentId: source.environmentId, threadId: agent.childThreadId });
+        if (child === null) continue;
+        const childKey = threadKey(child);
+        if (visited.has(childKey)) continue;
+        visited.add(childKey);
+        const projection = get(environmentThreadDetails.quietThreadAtom(child))?.projection;
+        if (!projection) {
+          partial = true;
+          continue;
+        }
+        partial ||= get(environmentThreadDetails.historyAtom(child)).hasMoreHistory;
+        let environmentTurns = seenTurns.get(child.environmentId);
+        if (!environmentTurns) {
+          environmentTurns = new Set();
+          seenTurns.set(child.environmentId, environmentTurns);
+        }
+        const turns = projection.providerTurns.filter(({ id }) => {
+          if (environmentTurns.has(id)) return false;
+          environmentTurns.add(id);
+          return true;
+        });
+        const parentRunId = inheritedRunId === undefined ? agent.runId : inheritedRunId;
+        if (turns.length > 0) {
+          groups.push({ parentRunId, turns, remote: child.environmentId !== ref.environmentId });
+        }
+        collect(child, projection.subagents, parentRunId);
+      }
+    };
+    collect(ref, root.subagents);
+    return { groups, partial };
+  }).pipe(Atom.setIdleTTL(0), Atom.withLabel(`web-worker-usage:${key}`));
+});
+
+export function useWorkerUsage(ref: ScopedThreadRef) {
+  return useAtomValue(workerUsageAtomFamily(threadKey(ref)));
 }
 
 export function useThreadStatus(ref: ScopedThreadRef | null): EnvironmentThreadStatus {

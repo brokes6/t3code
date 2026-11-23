@@ -7,6 +7,7 @@ import {
   EnvironmentId,
   EventId,
   ExecutionEnvironmentDescriptor,
+  MAX_COMPOSER_WORKERS,
   MessageId,
   NodeId,
   OrchestrationV2DispatchCommandError,
@@ -115,7 +116,12 @@ const makeServerConfig = (
   ...decodeServerConfig({
     environment: {
       ...descriptor,
-      capabilities: { ...descriptor.capabilities, issues: supportsIssues, workerRequests: true },
+      capabilities: {
+        ...descriptor.capabilities,
+        issues: supportsIssues,
+        workerRequests: true,
+        maxRequestedWorkers: MAX_COMPOSER_WORKERS,
+      },
     },
     auth,
     cwd: "/workspace/render",
