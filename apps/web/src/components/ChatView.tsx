@@ -356,6 +356,7 @@ import { useRightPanelSurfaceClose } from "../hooks/useRightPanelSurfaceClose";
 import { ComposerBannerStack, type ComposerBannerStackItem } from "./chat/ComposerBannerStack";
 import { modelFallbackBannerItem } from "./chat/ComposerUsageLimits";
 import { ComposerSurface } from "./chat/ComposerSurface";
+import { TaskStepsCapsule } from "./chat/TaskStepsCapsule";
 import { resolveThreadSyncPhase } from "../threadSync";
 import { hasAvailableCompactionProvider } from "./chat/compaction.logic";
 import {
@@ -878,6 +879,15 @@ export default function ChatView(props: ChatViewProps) {
   const supportsProviderSwitchingViaHandoff = threadSupportsProviderHandoff(serverProjection);
   const activeLatestRun = isServerThread ? serverLatestRun : (activeThread?.latestRun ?? null);
   const activeActivityRun = isServerThread ? serverActivityRun : (activeThread?.latestRun ?? null);
+  const activityTodoList =
+    activeActivityRun === null || activeActivityRun.status === "rolled_back"
+      ? undefined
+      : serverProjection?.plans.findLast(
+          (plan) =>
+            plan.kind === "todo_list" &&
+            plan.status !== "superseded" &&
+            plan.runId === activeActivityRun.runId,
+        );
   const activeRuntime = isServerThread ? serverRuntime : (activeThread?.runtime ?? null);
   const hasHeldQueuedRuns =
     isServerThread &&
@@ -3797,6 +3807,13 @@ export default function ChatView(props: ChatViewProps) {
                     }
                   >
                     <ChildThreadApprovals threadRef={activeThreadRef} />
+                    {composerMounted && activityTodoList?.kind === "todo_list" ? (
+                      <TaskStepsCapsule
+                        key={`${activeThreadKey}/${activityTodoList.runId}`}
+                        steps={activityTodoList.steps}
+                        explanation={activityTodoList.explanation}
+                      />
+                    ) : null}
                     <div className="relative">
                       <ComposerSurface.Shell contextRow={showComposerContextStrip}>
                         <ComposerSurface.Host

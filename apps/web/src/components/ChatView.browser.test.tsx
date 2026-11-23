@@ -3,12 +3,15 @@ import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environ
 import {
   EnvironmentId,
   IssueTrackerKind,
+  NodeId,
   ORCHESTRATION_V2_WS_METHODS,
+  PlanId,
   RunId,
   ThreadId,
   WS_METHODS,
   type IssueDetail,
   type IssueRef,
+  type OrchestrationV2PlanArtifact,
   type ThreadIssueLink,
 } from "@t3tools/contracts";
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
@@ -377,6 +380,83 @@ it("a question that opens while a stashed file is checked keeps a machine stash"
   );
   expect(usePromptStashStore.getState().entries).toHaveLength(1);
   usePromptStashStore.getState().takeEntry("stash-late-question");
+});
+
+it("opens the current turn’s task steps and keeps them open as progress updates", async () => {
+  const style = document.createElement("style");
+  style.textContent = stylesheet;
+  document.head.append(style);
+  using _style = { [Symbol.dispose]: () => style.remove() };
+  await page.viewport(1280, 800);
+  const thread = threadWithHistory("task-steps", 2);
+  const other = threadWithHistory("no-task-steps", 1);
+  using _environment = installFakeEnvironment([thread, other]);
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const router = getRouter(
+    createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${thread.id}`] }),
+  );
+  await router.load();
+  await using _app = await render(<AppRoot router={router} />, {
+    // AppRoot brings its own router.
+    router: false,
+  });
+  await expect.element(page.getByTestId("composer-editor")).toBeVisible();
+
+  const plan = {
+    id: PlanId.make("current-task-list"),
+    threadId: thread.id,
+    runId: RunId.make("task-steps-run-1"),
+    nodeId: NodeId.make("task-steps-node"),
+    kind: "todo_list",
+    status: "active",
+    steps: [
+      { id: "read", text: "Read the source", status: "completed", durationMs: 800 },
+      { id: "verify", text: "Verify the result", status: "running" },
+    ] as const,
+  } satisfies OrchestrationV2PlanArtifact;
+  await emitThreadEvent(thread.id, {
+    type: "plan.updated",
+    payload: { ...plan, id: PlanId.make("older-list"), runId: RunId.make("task-steps-run-0") },
+  });
+  await emitThreadEvent(thread.id, { type: "plan.updated", payload: plan });
+
+  const toggle = page.getByRole("button", { name: /^Tasks 1\/2/ });
+  const panel = page.getByRole("region", { name: "Task steps" });
+  await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
+  await userEvent.click(toggle);
+  await expect.element(panel.getByText("Verify the result")).toBeVisible();
+  const panelBounds = panel.element().getBoundingClientRect();
+  const toggleBounds = toggle.element().getBoundingClientRect();
+  expect(panelBounds.bottom).toBeLessThanOrEqual(toggleBounds.top);
+  expect((panelBounds.left + panelBounds.right) / 2).toBeCloseTo(
+    (toggleBounds.left + toggleBounds.right) / 2,
+    0,
+  );
+  await userEvent.tab();
+  await expect.element(panel).toHaveFocus();
+
+  await emitThreadEvent(thread.id, {
+    type: "plan.updated",
+    payload: {
+      ...plan,
+      status: "completed",
+      steps: [plan.steps[0], { ...plan.steps[1], status: "completed", durationMs: 1_600 }],
+    },
+  });
+  const completedToggle = page.getByRole("button", { name: /^Tasks 2\/2/ });
+  await expect.element(completedToggle).toBeVisible();
+  expect(completedToggle.element().textContent?.replace(/\p{Cf}/gu, "")).toContain("2.4s");
+  await expect.element(panel).toBeVisible();
+  await userEvent.keyboard("{Escape}");
+  await expect.element(panel).not.toBeInTheDocument();
+  await expect.element(completedToggle).toHaveFocus();
+
+  await router.navigate({ to: `/${ENVIRONMENT_ID}/${other.id}` });
+  await expect.element(page.getByText("Answer 0 for no-task-steps.")).toBeVisible();
+  await expect.element(completedToggle).not.toBeInTheDocument();
 });
 
 it("a new draft does not load its reserved thread before the server lists it", async () => {
