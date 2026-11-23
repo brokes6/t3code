@@ -2,6 +2,7 @@ import { applyThreadPullRequestLinkUpdate } from "../threadPullRequests.ts";
 import {
   applyOrchestrationV2ThreadVisit,
   isQueuedProviderThreadPlaceholder,
+  preserveProviderTurnUsage,
 } from "@t3tools/contracts";
 import type {
   OrchestrationV2DomainEvent,
@@ -410,18 +411,13 @@ export function applyOrchestrationV2ProjectionEvent(
     case "provider-turn.updated":
       return {
         ...base,
-        providerTurns: upsertEntity(base.providerTurns, {
-          ...event.payload,
-          ...((event.payload.tokenUsage ??
-            base.providerTurns.find((turn) => turn.id === event.payload.id)?.tokenUsage) ===
-          undefined
-            ? {}
-            : {
-                tokenUsage:
-                  event.payload.tokenUsage ??
-                  base.providerTurns.find((turn) => turn.id === event.payload.id)?.tokenUsage,
-              }),
-        }),
+        providerTurns: upsertEntity(
+          base.providerTurns,
+          preserveProviderTurnUsage(
+            event.payload,
+            base.providerTurns.find((turn) => turn.id === event.payload.id),
+          ),
+        ),
       };
     case "runtime-request.updated":
       return { ...base, runtimeRequests: upsertEntity(base.runtimeRequests, event.payload) };

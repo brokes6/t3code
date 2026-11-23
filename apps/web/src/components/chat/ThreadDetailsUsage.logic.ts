@@ -3,6 +3,7 @@ import {
   type ProviderInstanceId,
   type ServerProvider,
   type ServerProviderUsageLimits,
+  type ServerProviderUsageWindow,
   type UsageLimitSourceSnapshots,
 } from "@t3tools/contracts";
 import {
@@ -13,13 +14,17 @@ import {
   displayLimitWindows,
   hubRoutes,
   instanceHubs,
+  officialUsageLimits,
+  paceRemainingPercent,
+  remainingPercent,
   type LimitPoolWindow,
 } from "@t3tools/shared/usageLimits";
 import { limitsNotice } from "@t3tools/shared/usageLimitsCopy";
 
-export type ThreadDetailsLimits =
+export type ThreadDetailsLimits = (
   | { readonly kind: "instance"; readonly limits: ServerProviderUsageLimits }
-  | { readonly kind: "pool"; readonly windows: readonly LimitPoolWindow[] };
+  | { readonly kind: "pool"; readonly windows: readonly LimitPoolWindow[] }
+) & { readonly budget?: ServerProviderUsageWindow };
 
 // collectLimitAccounts keys its input by environment; the card reads one, so any id serves.
 const CARD_ENVIRONMENT = EnvironmentId.make("thread-details");
@@ -36,21 +41,66 @@ export function resolveThreadDetailsLimits(
   const report = collectProviderUsageLimits(provider.instanceId, providers, sources, now, model);
   // Only this instance's data: the report keeps one instance per login, and any other entry may be
   // a different login or workspace, so fall back to the instance's own snapshot.
-  const own =
+  const limits =
     report?.accounts.find((entry) => entry.instanceId === provider.instanceId)?.limits ??
     provider.usageLimits;
-  if (!own) return null;
+  if (!limits) return null;
+  const budget = provider.usageLimits?.windows.find((window) => window.spend !== undefined);
+  const own = officialUsageLimits(limits);
+  const instance = {
+    kind: "instance",
+    limits: own,
+    ...(budget === undefined ? {} : { budget }),
+  } as const;
   const hubs = instanceHubs(provider, sources);
-  if (limitsNotice(own) === null || hubs.length === 0) return { kind: "instance", limits: own };
+  if (limitsNotice(own) === null || hubs.length === 0) return instance;
   // An instance sent to a hub reads no limits of its own; its hub pools the accounts it spends.
-  return hubPool(provider.driver, model, providers, hubs, now) ?? { kind: "instance", limits: own };
+  const pool = hubPool(provider.driver, model, providers, hubs, now);
+  return pool === null ? instance : { ...pool, ...(budget === undefined ? {} : { budget }) };
 }
 
-export function nextPoolReset(window: LimitPoolWindow, now: number) {
+function nextPoolReset(window: LimitPoolWindow, now: number) {
   const pooled = window.members.length > 1;
   return (
     window.resets.find((reset) => reset.at > now && (!pooled || reset.restoresPercent > 0)) ?? null
   );
+}
+
+export function usageWindowDisplay(
+  window: ServerProviderUsageWindow | LimitPoolWindow,
+  now: number,
+) {
+  if ("members" in window) {
+    const next = nextPoolReset(window, now);
+    return {
+      left: window.remainingPercent,
+      tick: null,
+      resetsAt: next?.member.window.resetsAt,
+      resetWindow: next?.member.window,
+      restoresPercent: next?.restoresPercent,
+    };
+  }
+  return {
+    left: remainingPercent(window),
+    tick: paceRemainingPercent(window, now),
+    resetsAt: window.resetsAt,
+    resetWindow: window,
+    restoresPercent: undefined,
+  };
+}
+
+export function limitResetCreditCount(resolved: ThreadDetailsLimits): number | undefined {
+  if (resolved.kind === "instance") return resolved.limits.resetCredits?.availableCount;
+  const balances = new Map<string, number>();
+  for (const window of resolved.windows) {
+    for (const { account } of window.members) {
+      const credits = account.limits.resetCredits;
+      if (credits !== undefined) balances.set(account.key, credits.availableCount);
+    }
+  }
+  return balances.size === 0
+    ? undefined
+    : [...balances.values()].reduce((total, balance) => total + balance, 0);
 }
 
 function hubPool(

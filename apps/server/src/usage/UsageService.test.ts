@@ -526,6 +526,54 @@ describe("Codex usage history", () => {
 });
 
 describe("UsageService", () => {
+  it.effect("prices completed turns by model and leaves unknown models unpriced", () =>
+    Effect.gen(function* () {
+      const { home, settings } = yield* setup;
+      yield* Effect.gen(function* () {
+        const service = yield* UsageService.make;
+        assert.equal((yield* service.refreshRates).status, "fresh");
+        const tokens = {
+          usageStatus: "complete" as const,
+          usageScope: "main_agent" as const,
+          inputTokens: 1_000_000,
+          cachedInputTokens: 500_000,
+          cacheCreationTokens: 250_000,
+          outputTokens: 500_000,
+          reasoningTokens: 250_000,
+          hasSubagents: false,
+        };
+        assert.deepEqual(yield* service.priceTurn("turn-pricing-model", tokens), {
+          costUsd: 6,
+          costSource: "modelPriced",
+        });
+        assert.deepEqual(yield* service.priceTurn("unknown-model-for-this-test", tokens), {
+          costSource: "unpriced",
+        });
+      }).pipe(
+        Effect.provide(
+          layerService({
+            home,
+            prefix: "turn-prices",
+            settings: {
+              ...settings,
+              usagePriceOverrides: {
+                "turn-pricing-model": {
+                  inputCostPerMillionTokens: 2,
+                  outputCostPerMillionTokens: 8,
+                  cacheReadCostPerMillionTokens: 1,
+                  cacheWriteCostPerMillionTokens: 4,
+                },
+              },
+            },
+            ratesDocument: {
+              "turn-pricing-model": { input_cost_per_token: 1, output_cost_per_token: 1 },
+            },
+          }),
+        ),
+      );
+    }),
+  );
+
   it.effect("keeps pricing metadata paired with the rates used during a concurrent refresh", () =>
     Effect.gen(function* () {
       const { home, settings } = yield* setup;

@@ -52,6 +52,7 @@ import * as ProviderUsageAnalytics from "../telemetry/ProviderUsageAnalytics.ts"
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import { UsageLimitResetFallback } from "../usage/UsageLimitSources.ts";
+import * as UsageService from "../usage/UsageService.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import type { ProviderInstance } from "@t3tools/provider-core/server/driver";
 import type { ServerProvider } from "@t3tools/contracts";
@@ -361,9 +362,18 @@ it.effect("records accepted billed turn usage once without billing the context w
       }),
     runSettled: () => Effect.void,
   });
+  const layerPricing = Layer.mock(UsageService.UsageService)({
+    priceTurn: (model, usage) =>
+      Effect.sync(() => {
+        assert.equal(model, modelSelection.model);
+        assert.equal(usage.inputTokens, 40);
+        return { costUsd: 0.25, costSource: "modelPriced" } as const;
+      }),
+  });
   return Effect.gen(function* () {
     const now = yield* DateTime.now;
     const eventSink = yield* EventSink.EventSinkV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
     const ingestor = yield* ProviderEventIngestor.ProviderEventIngestorV2;
     const idAllocator = yield* IdAllocator.IdAllocatorV2;
     const threadEvent = yield* threadCreatedEvent(now);
@@ -421,6 +431,23 @@ it.effect("records accepted billed turn usage once without billing the context w
     };
     yield* ingestor.ingestNormalized(input);
     yield* ingestor.ingestNormalized(input);
+    const { turnTokenUsage, ...sparseTurn } = providerTurn;
+    yield* ingestor.ingestNormalized({
+      ...input,
+      event: { ...input.event, providerTurn: sparseTurn },
+    });
+    const { providerTurns } = yield* projections.getThreadRecords(threadEvent.threadId, [
+      "providerTurns",
+    ]);
+    assert.deepEqual(providerTurns, [
+      {
+        ...providerTurn,
+        model: modelSelection.model,
+        costUsd: 0.25,
+        costSource: "modelPriced",
+      },
+    ]);
+    assert.deepEqual(providerTurns[0]?.turnTokenUsage, turnTokenUsage);
     const ignored = yield* ingestor.ingestNormalized({
       ...input,
       event: {
@@ -446,7 +473,7 @@ it.effect("records accepted billed turn usage once without billing the context w
       providerTurn,
       context: input.analyticsContext,
     });
-  }).pipe(Effect.provide(layerTest.pipe(Layer.provide(layerAnalytics))));
+  }).pipe(Effect.provide(layerTest.pipe(Layer.provide(Layer.merge(layerAnalytics, layerPricing)))));
 });
 
 it.effect(

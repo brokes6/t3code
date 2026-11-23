@@ -92,13 +92,15 @@ type SaveAttempt = {
 };
 
 export function UsagePriceOverrides({
-  usage,
-  initialSelectedEnvironmentIds,
+  usage = [],
+  initialSelectedEnvironmentIds = null,
+  environmentId,
   initialModel,
   onOpenChange,
 }: {
-  readonly usage: readonly EnvironmentUsageStatus[];
-  readonly initialSelectedEnvironmentIds: ReadonlySet<EnvironmentId> | null;
+  readonly usage?: readonly EnvironmentUsageStatus[];
+  readonly initialSelectedEnvironmentIds?: ReadonlySet<EnvironmentId> | null;
+  readonly environmentId?: EnvironmentId;
   readonly initialModel?: string | undefined;
   readonly onOpenChange: (open: boolean) => void;
 }) {
@@ -108,8 +110,10 @@ export function UsagePriceOverrides({
     target.unavailable === null ? target : { ...target, unavailable: messages(target.unavailable) },
   );
   const [selectedIds, setSelectedIds] = useState(initialSelectedEnvironmentIds);
-  const selected = environments.filter(
-    (environment) => selectedIds === null || selectedIds.has(environment.environmentId),
+  const selected = environments.filter((environment) =>
+    environmentId === undefined
+      ? selectedIds === null || selectedIds.has(environment.environmentId)
+      : environment.environmentId === environmentId,
   );
   const [drafts, setDrafts] = useState<readonly UsagePriceDraft[]>(() =>
     initialModel === undefined ||
@@ -160,7 +164,11 @@ export function UsagePriceOverrides({
           },
       ),
     ...drafts.filter((draft) => draft.isNew),
-  ];
+  ].sort((a, b) =>
+    environmentId === undefined
+      ? 0
+      : Number(b.model === initialModel) - Number(a.model === initialModel),
+  );
   const stagedDrafts = drafts.filter((draft) => !isEmptyUsagePriceDraft(draft));
   const errors = usagePriceTableErrors(selected, stagedDrafts, messages);
   // New rows still block Save, but show a price error only once a price or mapping is typed.
@@ -303,62 +311,71 @@ export function UsagePriceOverrides({
             <T>Custom model prices</T>
           </DialogTitle>
           <DialogDescription>
-            <T>
-              Prices and mappings apply to all past and future usage on the environments you select.
-            </T>
+            {environmentId === undefined ? (
+              <T>
+                Prices and mappings apply to all past and future usage on the environments you
+                select.
+              </T>
+            ) : (
+              <T>Prices update Usage page estimates and set the rate for future thread turns.</T>
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <Label id="usage-prices-apply-label" className="shrink-0">
-                <T>Apply to</T>
-              </Label>
-              <Menu>
-                <MenuTrigger
-                  render={<Button variant="outline" size="sm" className="min-w-0" />}
-                  aria-labelledby="usage-prices-apply-label usage-prices-selection"
-                  disabled={pending || hasChanges}
-                >
-                  <span id="usage-prices-selection" className="truncate">
-                    {selectionLabel}
-                  </span>
-                  <ChevronDownIcon className="size-3.5 shrink-0" aria-hidden />
-                </MenuTrigger>
-                <MenuPopup align="start">
-                  <MenuCheckboxItem
-                    checked={selectedIds === null}
-                    closeOnClick={false}
-                    onCheckedChange={(checked) => selectEnvironments(checked ? null : new Set())}
+            {environmentId === undefined ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <Label id="usage-prices-apply-label" className="shrink-0">
+                  <T>Apply to</T>
+                </Label>
+                <Menu>
+                  <MenuTrigger
+                    render={<Button variant="outline" size="sm" className="min-w-0" />}
+                    aria-labelledby="usage-prices-apply-label usage-prices-selection"
+                    disabled={pending || hasChanges}
                   >
-                    <T>All environments</T>
-                  </MenuCheckboxItem>
-                  <MenuSeparator />
-                  {environments.map((environment) => (
+                    <span id="usage-prices-selection" className="truncate">
+                      {selectionLabel}
+                    </span>
+                    <ChevronDownIcon className="size-3.5 shrink-0" aria-hidden />
+                  </MenuTrigger>
+                  <MenuPopup align="start">
                     <MenuCheckboxItem
-                      key={environment.environmentId}
-                      checked={selectedIds === null || selectedIds.has(environment.environmentId)}
+                      checked={selectedIds === null}
                       closeOnClick={false}
-                      onCheckedChange={(checked) => {
-                        const next = new Set(selected.map((target) => target.environmentId));
-                        if (checked) next.add(environment.environmentId);
-                        else next.delete(environment.environmentId);
-                        selectEnvironments(next.size === environments.length ? null : next);
-                      }}
+                      onCheckedChange={(checked) => selectEnvironments(checked ? null : new Set())}
                     >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span className="min-w-0 flex-1 truncate">{environment.label}</span>
-                        {environment.unavailable ? (
-                          <span className="text-xs text-muted-foreground">
-                            {environment.unavailable}
-                          </span>
-                        ) : null}
-                      </span>
+                      <T>All environments</T>
                     </MenuCheckboxItem>
-                  ))}
-                </MenuPopup>
-              </Menu>
-            </div>
+                    <MenuSeparator />
+                    {environments.map((environment) => (
+                      <MenuCheckboxItem
+                        key={environment.environmentId}
+                        checked={selectedIds === null || selectedIds.has(environment.environmentId)}
+                        closeOnClick={false}
+                        onCheckedChange={(checked) => {
+                          const next = new Set(selected.map((target) => target.environmentId));
+                          if (checked) next.add(environment.environmentId);
+                          else next.delete(environment.environmentId);
+                          selectEnvironments(next.size === environments.length ? null : next);
+                        }}
+                      >
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span className="min-w-0 flex-1 truncate">{environment.label}</span>
+                          {environment.unavailable ? (
+                            <span className="text-xs text-muted-foreground">
+                              {environment.unavailable}
+                            </span>
+                          ) : null}
+                        </span>
+                      </MenuCheckboxItem>
+                    ))}
+                  </MenuPopup>
+                </Menu>
+              </div>
+            ) : (
+              <p className="truncate text-sm">{destinationLabel}</p>
+            )}
             <span className="text-xs text-muted-foreground">
               <T>USD / million tokens</T>
             </span>

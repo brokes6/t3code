@@ -32,6 +32,7 @@ export function exhaustedUsageWindow(
   const windows = provider?.usageLimits?.windows ?? [];
   const exhausted = windows.filter(
     (window) =>
+      window.spend === undefined &&
       (window.usedPercent ?? 0) >= 100 &&
       (model === undefined || window.modelIds === undefined || window.modelIds.includes(model)) &&
       (model === undefined ||
@@ -169,6 +170,12 @@ export function providersWithLimits(
       isProviderAvailable(provider) &&
       provider.usageLimits !== undefined,
   );
+}
+
+export function officialUsageLimits(limits: ServerProviderUsageLimits): ServerProviderUsageLimits {
+  return limits.windows.some((window) => window.spend !== undefined)
+    ? { ...limits, windows: limits.windows.filter((window) => window.spend === undefined) }
+    : limits;
 }
 
 export type LimitPresentations = ReadonlyMap<
@@ -397,7 +404,9 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
   for (const [environmentId, presentation] of presentations) {
     const label = presentation.entry.target.label;
     for (const provider of providersWithLimits(presentation.serverConfig?.providers ?? [])) {
-      if (!provider.usageLimits || limitsNotice(provider.usageLimits) !== null) continue;
+      if (!provider.usageLimits) continue;
+      const limits = officialUsageLimits(provider.usageLimits);
+      if (limitsNotice(limits) !== null) continue;
       merge(nativeRowKey(resolveKey, environmentId, provider), {
         key: `${environmentId}:${provider.instanceId}`,
         driver: provider.driver,
@@ -408,7 +417,7 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
         environments: [{ environmentId, label }],
         sourceLabel: null,
         redeem: { environmentId, input: { instanceId: provider.instanceId } },
-        limits: provider.usageLimits,
+        limits,
       });
     }
   }
@@ -761,6 +770,7 @@ function resetMillis(window: ServerProviderUsageWindow): number | null {
 }
 
 export function elapsedShare(window: ServerProviderUsageWindow, now: number): number | null {
+  if (window.spend?.startsAt !== undefined && Date.parse(window.spend.startsAt) > now) return null;
   const resetsAt = resetMillis(window);
   if (resetsAt === null || window.windowDurationMins === undefined) return null;
   const length = window.windowDurationMins * MINUTE;
@@ -988,8 +998,10 @@ export function collectProviderUsageLimits(
     const snapshot = { provider, limits: provider.usageLimits };
     const key = accountKey ?? `instance:${provider.instanceId}`;
     const previous = nativeByAccount.get(key);
-    const previousUsable = previous ? limitsNotice(previous.usage.limits) === null : false;
-    const usable = limitsNotice(snapshot.limits) === null;
+    const previousUsable = previous
+      ? limitsNotice(officialUsageLimits(previous.usage.limits)) === null
+      : false;
+    const usable = limitsNotice(officialUsageLimits(snapshot.limits)) === null;
     const providerWins =
       !previous ||
       (usable && !previousUsable) ||
@@ -1011,7 +1023,11 @@ export function collectProviderUsageLimits(
   const nativeAccountKeys = new Set(
     native.flatMap(({ usage: { provider, limits } }) => {
       const key = resolveKey(nativeReport(provider));
-      return key && limits.windows.length && !limits.unavailable ? [key] : [];
+      return key &&
+        limits.windows.some((window) => window.spend === undefined) &&
+        !limits.unavailable
+        ? [key]
+        : [];
     }),
   );
   const accounts: Array<UsageLimitsReport["accounts"][number]> = [];

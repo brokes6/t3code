@@ -68,6 +68,7 @@ import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
+import { ProviderSpendBudgetSetting } from "./ProviderSpendBudgetSetting";
 import { AcpSessionManagementSection } from "./AcpSessionManagementSection";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { readCodexSetupMode } from "./CodexSetupSection.logic";
@@ -1388,6 +1389,14 @@ export function ProviderInstanceCard({
               />
             </div>
           }
+        />
+        <ProviderSpendBudgetSetting
+          budget={instance.spendBudget}
+          disabled={readOnly || !canWriteSettings}
+          onSave={(budget) => {
+            const { spendBudget: _previousBudget, ...rest } = instance;
+            return onUpdate(budget === undefined ? rest : { ...rest, spendBudget: budget });
+          }}
         />
       </SettingsSection>
 

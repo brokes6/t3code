@@ -58,6 +58,7 @@ import {
   IDLE_COMPACTION_TEXT,
   idleCompactionOf,
   isQueuedProviderThreadPlaceholder,
+  preserveProviderTurnUsage,
   OrchestrationV2AppThreadJson as OrchestrationV2AppThreadJsonSchema,
   OrchestrationV2CheckpointJson as OrchestrationV2CheckpointJsonSchema,
   OrchestrationV2CheckpointScopeJson as OrchestrationV2CheckpointScopeJsonSchema,
@@ -185,6 +186,15 @@ export const ProjectionStoreV2Error = Schema.Union([
   ProjectionStoreReadError,
 ]);
 export type ProjectionStoreV2Error = typeof ProjectionStoreV2Error.Type;
+
+class ProviderTurnSpendReadError extends Schema.TaggedError<ProviderTurnSpendReadError>()(
+  "ProviderTurnSpendReadError",
+  { instanceId: ProviderInstanceId, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Failed to read recorded turn spend for provider instance ${this.instanceId}.`;
+  }
+}
 
 export type ProjectionRecoveryKind =
   | "queued-runs"
@@ -548,6 +558,11 @@ export interface OlderSettledThreadsListing {
 }
 
 export interface ProjectionStoreV2Shape {
+  readonly readProviderTurnSpend: (
+    instanceId: ProviderInstanceId,
+    start: DateTime.Utc,
+    end: DateTime.Utc,
+  ) => Effect.Effect<number, ProviderTurnSpendReadError>;
   readonly searchThreadStream: (
     input: OrchestrationV2SearchThreadInput,
   ) => Stream.Stream<OrchestrationV2SearchThreadResult, ProjectionStoreV2Error>;
@@ -970,12 +985,7 @@ function upsertProviderTurn(
   next: OrchestrationV2ProviderTurn,
 ): Array<OrchestrationV2ProviderTurn> {
   const current = turns.find((turn) => turn.id === next.id);
-  return upsertById(turns, {
-    ...next,
-    ...((next.tokenUsage ?? current?.tokenUsage) === undefined
-      ? {}
-      : { tokenUsage: next.tokenUsage ?? current?.tokenUsage }),
-  });
+  return upsertById(turns, preserveProviderTurnUsage(next, current));
 }
 
 function preserveRunRecordedFields(
@@ -2978,8 +2988,14 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               break;
             }
             case "provider-turn.updated": {
+              const turn = event.payload;
               const existingRows =
-                event.payload.tokenUsage === undefined
+                turn.tokenUsage === undefined ||
+                (turn.status !== "pending" &&
+                  turn.status !== "running" &&
+                  (turn.turnTokenUsage === undefined ||
+                    turn.costSource === undefined ||
+                    turn.model === undefined))
                   ? yield* sql<PayloadRow>`
                     SELECT payload_json
                     FROM orchestration_v2_projection_provider_turns
@@ -2991,10 +3007,10 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               const providerTurn =
                 existing === undefined
                   ? event.payload
-                  : upsertProviderTurn(
-                      [yield* decodeProviderTurnPayload(existing.payload_json)],
-                      event.payload,
-                    )[0]!;
+                  : preserveProviderTurnUsage(
+                      turn,
+                      yield* decodeProviderTurnPayload(existing.payload_json),
+                    );
               const payloadJson = yield* encodeProviderTurnPayload(providerTurn);
               const payload = parseEncodedPayload(payloadJson);
               yield* sql`
@@ -6025,6 +6041,28 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       `;
       if (rows.length === 0) return yield* new ProjectionStoreThreadNotFoundError({ threadId });
     });
+    const readProviderTurnSpend = Effect.fn("ProjectionStore.readProviderTurnSpend")(
+      function* (instanceId: ProviderInstanceId, start: DateTime.Utc, end: DateTime.Utc) {
+        const rows = yield* sql<{ readonly amount: number }>`
+          SELECT COALESCE(SUM(CASE WHEN json_valid(turn.payload_json)
+            THEN json_extract(turn.payload_json, '$.costUsd') END), 0.0) AS amount
+          FROM orchestration_v2_projection_provider_threads AS provider
+          JOIN orchestration_v2_projection_provider_turns AS turn
+            ON turn.provider_thread_id = provider.provider_thread_id
+          WHERE provider.provider_instance_id = ${instanceId}
+            AND turn.completed_at >= ${DateTime.formatIso(start)}
+            AND turn.completed_at < ${DateTime.formatIso(end)}
+            AND turn.completed_at IS NOT NULL
+            AND turn.status IN ('completed', 'failed', 'interrupted', 'cancelled')
+        `;
+        return rows[0]?.amount ?? 0;
+      },
+      (effect, instanceId) =>
+        effect.pipe(
+          Effect.mapError((cause) => new ProviderTurnSpendReadError({ instanceId, cause })),
+        ),
+    );
+
     const controlReadError = (threadId: ThreadId) => (cause: unknown) =>
       isProjectionStoreThreadNotFoundError(cause)
         ? cause
@@ -9878,6 +9916,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       getThreadShell: readOnReader(getThreadShell),
       findGuestShareThreadId: readOnReader(findGuestShareThreadId),
       getThread: readOnReader(getThread),
+      readProviderTurnSpend: readOnReader(readProviderTurnSpend),
       findThread: readOnReader(findThread),
       getSettlementCandidates: readOnReader(getSettlementCandidates),
       getThreadsWithPullRequests: readOnReader(getThreadsWithPullRequests),

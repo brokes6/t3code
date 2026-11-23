@@ -329,6 +329,7 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
+import { ComposerUsageFooter } from "./chat/ComposerUsageFooter";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   resolveEffectiveEnvMode,
@@ -422,6 +423,7 @@ import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplat
 const EMPTY_FEEDBACK_SUBMISSIONS: ReadonlyArray<CodexFeedbackSubmission> = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_TURN_ITEMS: ThreadStructure["turnItems"] = [];
+const EMPTY_PROVIDER_TURNS: ThreadStructure["providerTurns"] = [];
 const EMPTY_RUNS: ThreadStructure["runs"] = [];
 const EMPTY_AUTO_UPDATE_ENVIRONMENTS: ReadonlyArray<EnvironmentPresentation> = [];
 const EMPTY_COMPOSER_BANNER_ITEMS: ReadonlyArray<ComposerBannerStackItem> = [];
@@ -571,7 +573,7 @@ export default function ChatView(props: ChatViewProps) {
     (thread) => thread.id === serverProjection.thread.activeProviderThreadId,
   );
   const activeThreadLiveTokenUsage = latestProviderTurnTokenUsage(
-    serverProjection?.providerTurns ?? [],
+    serverProjection?.providerTurns ?? EMPTY_PROVIDER_TURNS,
     serverProjection,
     activeProviderThread,
   );
@@ -1579,6 +1581,13 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadLiveTokenUsage,
     activeProviderThread,
   );
+  const threadUsage = {
+    providerInstanceId: activeProviderInstanceId,
+    model: activeUsageModel,
+    providers: providerStatuses,
+    sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
+    contextWindow: activeContextWindow,
+  };
   const pendingBackgroundTasks = deriveThreadPendingBackgroundTasks(serverProjection);
   const activeWorkStartedAt =
     deriveActiveWorkStartedAt(activeActivityRun, activeRuntime, localDispatchStartedAt) ??
@@ -4042,6 +4051,15 @@ export default function ChatView(props: ChatViewProps) {
                           </div>
                         </div>
                       </ComposerSurface.Shell>
+                      {!embedded && isServerThread ? (
+                        <ComposerUsageFooter
+                          usage={threadUsage}
+                          turns={serverProjection?.providerTurns ?? EMPTY_PROVIDER_TURNS}
+                          activeProviderThread={activeProviderThread}
+                          hasMoreHistory={serverThreadHistory.hasMoreHistory}
+                          environmentId={activeThread.environmentId}
+                        />
+                      ) : null}
                       {isDraftHeroState && composerBannerItems.length > 0 ? (
                         // Out of flow, like the headline, so a notice never moves the centered composer.
                         // Short windows pin the composer to the bottom, where an out-of-flow notice
@@ -4144,13 +4162,7 @@ export default function ChatView(props: ChatViewProps) {
                   onAddProjectScript={saveProjectScriptStable}
                   onUpdateProjectScript={updateProjectScriptStable}
                   onDeleteProjectScript={deleteProjectScriptStable}
-                  usage={{
-                    providerInstanceId: activeProviderInstanceId,
-                    model: activeUsageModel,
-                    providers: providerStatuses,
-                    sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
-                    contextWindow: activeContextWindow,
-                  }}
+                  usage={threadUsage}
                 />
 
                 <PullRequestThreadDialogHost

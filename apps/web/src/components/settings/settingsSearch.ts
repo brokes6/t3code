@@ -1090,6 +1090,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     providerSettingsOnly: true,
   },
   {
+    id: "model-pricing",
+    title: msg("Model pricing"),
+    to: "/settings/providers",
+    providerSettingsOnly: true,
+  },
+  {
     id: "text-generators",
     title: msg("Text generators"),
     to: "/settings/providers",

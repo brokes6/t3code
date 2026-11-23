@@ -419,6 +419,9 @@ it.effect("record reads restrict provider histories to delivery identities", () 
     const threadId = yield* addRolledBackRecoveryCandidate("delivery-identities");
     const sql = yield* SqlClient.SqlClient;
     const now = yield* DateTime.now;
+    const before = DateTime.add(now, { milliseconds: -1 });
+    const after = DateTime.add(now, { milliseconds: 1 });
+    const otherInstance = ProviderInstanceId.make("other-codex");
     for (const suffix of ["selected", "history"]) {
       const id = ProviderThreadId.make(`provider-thread:${suffix}`);
       yield* store.apply({
@@ -430,7 +433,7 @@ it.effect("record reads restrict provider histories to delivery identities", () 
           id,
           appThreadId: threadId,
           driver,
-          providerInstanceId,
+          providerInstanceId: suffix === "history" ? otherInstance : providerInstanceId,
           providerSessionId: null,
           ownerNodeId: null,
           nativeThreadRef: null,
@@ -445,11 +448,14 @@ it.effect("record reads restrict provider histories to delivery identities", () 
         },
       });
     }
-    for (const [suffix, attempt] of [
-      ["selected", "current"],
-      ["history", "old"],
-      ["runless", null],
-    ] as const) {
+    const turns = [
+      ["selected", "current", "selected", now, 1.25],
+      ["history", "old", "selected", after, 3],
+      ["runless", null, "selected", before, 9],
+      ["other", null, "history", now, 2.5],
+      ["unpriced", null, "selected", now, undefined],
+    ] as const;
+    for (const [index, [suffix, attempt, provider, completedAt, costUsd]] of turns.entries()) {
       yield* store.apply({
         id: EventId.make(`event:delivery-turn:${suffix}`),
         type: "provider-turn.updated",
@@ -457,17 +463,21 @@ it.effect("record reads restrict provider histories to delivery identities", () 
         occurredAt: now,
         payload: {
           id: ProviderTurnId.make(`turn:${suffix}`),
-          providerThreadId: ProviderThreadId.make("provider-thread:selected"),
+          providerThreadId: ProviderThreadId.make(`provider-thread:${provider}`),
           nodeId: NodeId.make("node:delivery"),
           runAttemptId: attempt === null ? null : RunAttemptId.make(attempt),
           nativeTurnRef: null,
-          ordinal: suffix === "selected" ? 1 : suffix === "history" ? 2 : 3,
+          ordinal: index + 1,
           status: "completed",
-          startedAt: now,
-          completedAt: now,
+          startedAt: completedAt,
+          completedAt,
+          ...(costUsd === undefined ? {} : { costUsd, costSource: "modelPriced" }),
         },
       });
     }
+    assert.equal(yield* store.readProviderTurnSpend(providerInstanceId, now, after), 1.25);
+    assert.equal(yield* store.readProviderTurnSpend(otherInstance, now, after), 2.5);
+    assert.equal(yield* store.readProviderTurnSpend(otherInstance, before, now), 0);
     assert.deepEqual(
       (yield* store.getThreadRecords(threadId, ["providerTurns"], {
         providerTurnAttemptIds: [RunAttemptId.make("current")],

@@ -1,4 +1,6 @@
 import * as Effect from "effect/Effect";
+import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -71,6 +73,22 @@ export type ResolvedProviderInstanceEnvironment = ReadonlyArray<
   Omit<ProviderInstanceEnvironmentVariable, "value"> & { readonly value: string }
 >;
 
+export const ProviderSpendBudget = Schema.Struct({
+  amountUsd: Schema.Number.check(Schema.isFinite(), Schema.isGreaterThan(0)),
+  period: Schema.Literals(["day", "week", "month"]),
+  startsAt: Schema.String.check(
+    Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/),
+    Schema.makeFilter((value) =>
+      DateTime.make(value).pipe(Option.exists((date) => DateTime.formatIsoDate(date) === value)),
+    ),
+  ),
+  timeZone: TrimmedNonEmptyString.check(
+    Schema.isPattern(/^[A-Za-z]/),
+    Schema.makeFilter((value) => Option.isSome(DateTime.zoneMakeNamed(value))),
+  ),
+});
+export type ProviderSpendBudget = typeof ProviderSpendBudget.Type;
+
 /** Drivers decode their own config; unknown-driver envelopes round-trip verbatim across versions. */
 export const ProviderInstanceConfig = Schema.Struct({
   driver: ProviderDriverKind,
@@ -78,6 +96,7 @@ export const ProviderInstanceConfig = Schema.Struct({
   accentColor: Schema.optional(TrimmedNonEmptyString),
   environment: Schema.optionalKey(ProviderInstanceEnvironment),
   enabled: Schema.optionalKey(Schema.Boolean),
+  spendBudget: Schema.optionalKey(ProviderSpendBudget),
   config: Schema.optionalKey(Schema.Unknown),
 });
 export type ProviderInstanceConfig = typeof ProviderInstanceConfig.Type;

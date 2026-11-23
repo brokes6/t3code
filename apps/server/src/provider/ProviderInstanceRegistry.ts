@@ -73,10 +73,11 @@ const entryEqual = (a: ProviderInstanceConfig, b: ProviderInstanceConfig): boole
 const withoutPresentation = ({
   displayName: _displayName,
   accentColor: _accentColor,
+  spendBudget: _spendBudget,
   ...runtime
 }: ProviderInstanceConfig) => runtime;
 
-// Display name and accent colour are only labels; changing them must not stop the instance's sessions.
+// Presentation and budget edits keep the instance's sessions alive.
 const runtimeEqual = (a: ProviderInstanceConfig, b: ProviderInstanceConfig): boolean =>
   Equal.equals(withoutPresentation(a), withoutPresentation(b));
 

@@ -94,6 +94,7 @@ import {
   ToolActivitySource,
 } from "./providerRuntime.ts";
 import { ThreadTokenUsageSnapshot } from "./providerRuntime.ts";
+import { UsageCostSource } from "./usage.ts";
 
 export const OrchestrationV2Actor = Schema.Literals(["user", "agent", "system"]);
 export type OrchestrationV2Actor = typeof OrchestrationV2Actor.Type;
@@ -1357,12 +1358,37 @@ export const OrchestrationV2ProviderTurn = Schema.Struct({
   completedAt: Schema.NullOr(Schema.DateTimeUtc),
   tokenUsage: Schema.optional(OrchestrationV2ProviderTurnTokenUsage),
   turnTokenUsage: Schema.optional(TurnTokenUsage),
-  /** The model the provider reported running this turn's root agent, which can differ from the requested one. */
+  costUsd: Schema.optional(Schema.Number.check(Schema.isFinite())),
+  costSource: Schema.optional(UsageCostSource),
+  /** The root agent's reported model, falling back to the selected model when pricing usage. */
   model: Schema.optional(TrimmedNonEmptyString),
   /** True when the provider dropped this turn's request before persisting it to native history. */
   promptDropped: Schema.optional(Schema.Literal(true)),
 });
 export type OrchestrationV2ProviderTurn = typeof OrchestrationV2ProviderTurn.Type;
+
+export function preserveProviderTurnUsage(
+  next: OrchestrationV2ProviderTurn,
+  previous: OrchestrationV2ProviderTurn | undefined,
+): OrchestrationV2ProviderTurn {
+  if (previous === undefined) return next;
+  return {
+    ...next,
+    ...(next.tokenUsage === undefined && previous.tokenUsage !== undefined
+      ? { tokenUsage: previous.tokenUsage }
+      : {}),
+    ...(next.turnTokenUsage === undefined && previous.turnTokenUsage !== undefined
+      ? { turnTokenUsage: previous.turnTokenUsage }
+      : {}),
+    ...(next.costSource === undefined && next.costUsd === undefined
+      ? {
+          ...(previous.costSource === undefined ? {} : { costSource: previous.costSource }),
+          ...(previous.costUsd === undefined ? {} : { costUsd: previous.costUsd }),
+        }
+      : {}),
+    ...(next.model === undefined && previous.model !== undefined ? { model: previous.model } : {}),
+  };
+}
 
 export function isDeliveredProviderTurn(
   turn: Pick<OrchestrationV2ProviderTurn, "promptDropped">,

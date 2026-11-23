@@ -22,6 +22,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SqlError from "effect/sql/SqlError";
 
@@ -34,6 +35,8 @@ import {
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import { UsageLimitResetFallback } from "../usage/UsageLimitSources.ts";
+import * as UsageService from "../usage/UsageService.ts";
+import * as ProviderSpendBudgets from "../usage/ProviderSpendBudgets.ts";
 import * as EventSink from "./EventSink.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
@@ -258,6 +261,8 @@ export const layer: Layer.Layer<
     const agentScope = yield* AgentScope;
     const instances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
     const usageLimitResets = yield* UsageLimitResetFallback;
+    const usage = yield* Effect.serviceOption(UsageService.UsageService);
+    const spendBudgets = yield* Effect.serviceOption(ProviderSpendBudgets.ProviderSpendBudgets);
     const scope = yield* Effect.scope;
     const completedTurnAnalytics = new Set<string>();
 
@@ -553,14 +558,26 @@ export const layer: Layer.Layer<
                     })),
                   ];
             }
-            case "provider_turn.updated":
+            case "provider_turn.updated": {
+              const turn = input.event.providerTurn;
+              const settled = turn.status !== "pending" && turn.status !== "running";
+              const tokenUsage = turn.turnTokenUsage;
+              let pricedTurn = turn;
+              if (settled && tokenUsage && Option.isSome(usage)) {
+                const model =
+                  turn.model ??
+                  (yield* projections.findThread(input.event.threadId ?? input.threadId))
+                    ?.modelSelection.model;
+                if (model !== undefined) {
+                  const price = yield* usage.value.priceTurn(model, tokenUsage);
+                  if (price.costSource !== undefined) pricedTurn = { ...turn, model, ...price };
+                }
+              }
               return [
-                ...(["completed", "interrupted", "failed", "cancelled"].includes(
-                  input.event.providerTurn.status,
-                )
+                ...(settled
                   ? yield* dismissNativeUserInputs(
                       input,
-                      input.event.providerTurn.id,
+                      turn.id,
                       input.event.threadId,
                       input.event.retainedRuntimeRequestIds,
                     )
@@ -568,10 +585,11 @@ export const layer: Layer.Layer<
                 yield* makeDomainEvent(input, {
                   type: "provider-turn.updated",
                   ...(input.event.threadId === undefined ? {} : { threadId: input.event.threadId }),
-                  payload: input.event.providerTurn,
-                  nodeId: input.event.providerTurn.nodeId,
+                  payload: pricedTurn,
+                  nodeId: turn.nodeId,
                 }),
               ];
+            }
             case "node.updated":
               // Adapters send an unchanged node again with each text delta. Compare with the
               // stored node, not the last one sent, because the server also writes nodes.
@@ -890,6 +908,16 @@ export const layer: Layer.Layer<
                   if (storedEvents.length === 0 || input.event.type !== "provider_turn.updated")
                     return;
                   const providerTurn = input.event.providerTurn;
+                  if (
+                    Option.isSome(spendBudgets) &&
+                    storedEvents.some(
+                      ({ event }) =>
+                        event.type === "provider-turn.updated" &&
+                        event.payload.costUsd !== undefined,
+                    )
+                  ) {
+                    yield* spendBudgets.value.turnSettled(input.providerInstanceId);
+                  }
                   if (
                     providerTurn.status !== "completed" &&
                     providerTurn.status !== "failed" &&

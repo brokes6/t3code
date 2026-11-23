@@ -97,6 +97,7 @@ import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
+import { ModelPricingSettings } from "./ModelPricingSettings";
 import { useManagedPolicy } from "~/state/managedPolicy";
 import { ExpandableText } from "./ExpandableText";
 import { IntervalSecondsField } from "./IntervalSecondsField";
@@ -383,6 +384,7 @@ function ProviderSettingsPanelContent(target: ProviderSettingsTarget) {
     if (
       !target.scoped &&
       (searchTargetId === searchableSetting("provider-health-check-interval").id ||
+        searchTargetId === searchableSetting("model-pricing").id ||
         searchTargetId === searchableSetting("usage-providers").id) &&
       !selectedEnvironmentCanRenderSettings &&
       searchableEnvironmentId !== undefined
@@ -1151,6 +1153,14 @@ export function EnvironmentProviderSettings({
         environmentLabel={environmentLabel}
         sources={settings.usageLimitSources}
         readOnly={readOnly}
+      />
+
+      <ModelPricingSettings
+        key={`model-pricing:${environmentId}`}
+        environmentId={environmentId}
+        providers={serverProviders}
+        settings={settings}
+        readOnly={Boolean(readOnly) || !canWriteSettings}
       />
 
       {/* The server drops text generators under a provider allow-list. */}

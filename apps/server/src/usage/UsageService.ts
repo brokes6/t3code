@@ -1,5 +1,6 @@
 import {
   type ProviderInstanceConfig,
+  type OrchestrationV2ProviderTurn,
   ProviderInstanceId,
   USAGE_CONTRACT_VERSION,
   type ServerSettings as ServerSettingsValue,
@@ -8,6 +9,7 @@ import {
   type UsagePricing,
   type UsageSummary,
   type UsageSummaryInput,
+  type TurnTokenUsage,
   UsageReadError,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -48,7 +50,9 @@ import {
 import {
   createOverrideRateTable,
   isUnlistedModel,
+  lookupRate,
   parseRateTable,
+  priceUsage,
   type RateTable,
 } from "./usagePricing.ts";
 import {
@@ -166,6 +170,10 @@ export class UsageService extends Context.Service<
   {
     readonly readSummary: (input: UsageSummaryInput) => Effect.Effect<UsageSummary, UsageReadError>;
     readonly refreshRates: Effect.Effect<UsagePricing>;
+    readonly priceTurn: (
+      model: string,
+      usage: TurnTokenUsage,
+    ) => Effect.Effect<Pick<OrchestrationV2ProviderTurn, "costUsd" | "costSource">>;
   }
 >()("t3/usage/UsageService") {}
 
@@ -326,6 +334,10 @@ export const make = Effect.gen(function* () {
   });
 
   const ensureRates = (force: boolean) => ratesLock.withPermit(loadRates(force));
+  const refreshTurnRates = yield* Effect.cachedWithTTL(
+    ensureRates(false).pipe(Effect.timeoutOption(2_000)),
+    RATES_REFRESH_FLOOR_MS,
+  );
 
   // Rates are kept for RATES_TTL_MS, so a model released after the table was fetched would stay unpriced
   // that long. A scan that meets a model the table does not list refetches early: once per model against
@@ -360,6 +372,47 @@ export const make = Effect.gen(function* () {
         }),
     ),
   );
+
+  const priceTurn = Effect.fn("UsageService.priceTurn")(function* (
+    model: string,
+    usage: TurnTokenUsage,
+  ) {
+    if (usage.localCommand || usage.usageStatus === "unavailable") return {};
+    if (usage.usageStatus !== "complete") return { costSource: "unpriced" as const };
+    const settings = yield* readSettings.pipe(Effect.option);
+    if (Option.isNone(settings)) return { costSource: "unpriced" as const };
+    const overrides = createOverrideRateTable(settings.value.usagePriceOverrides);
+    if (!overrides.has(model.trim())) {
+      yield* loadSavedRates;
+      if (lookupRate(rates, model) === null) {
+        yield* refreshTurnRates;
+      }
+    }
+    const cachedInputTokens = usage.cachedInputTokens ?? 0;
+    const cacheCreationTokens = usage.cacheCreationTokens ?? 0;
+    const { costUsd, costSource } = priceUsage(
+      rates,
+      {
+        model,
+        reportedCostUsd: null,
+        speed: "standard",
+        totals: {
+          uncachedInputTokens: Math.max(
+            0,
+            usage.inputTokens - cachedInputTokens - cacheCreationTokens,
+          ),
+          cachedInputTokens,
+          cacheCreationTokens,
+          outputTokens: usage.outputTokens,
+          reasoningTokens: usage.reasoningTokens ?? 0,
+        },
+      },
+      overrides,
+    );
+    return costSource === "unpriced" || !Number.isFinite(costUsd)
+      ? { costSource: "unpriced" as const }
+      : { costUsd, costSource };
+  });
 
   const usageInstances = Effect.fn("UsageService.usageInstances")(function* <Config>(
     driver: ProviderDriver<Config, unknown, unknown>,
@@ -1269,7 +1322,7 @@ export const make = Effect.gen(function* () {
     return yield* Deferred.await(deferred);
   });
 
-  return { readSummary, refreshRates, awaitPersisted } as const;
+  return { readSummary, refreshRates, priceTurn, awaitPersisted } as const;
 });
 
 export const layer = Layer.effect(UsageService, make);

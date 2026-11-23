@@ -54,6 +54,7 @@ import {
   latestProviderVersionCacheKeys,
 } from "@t3tools/provider-core/server/maintenanceResolver";
 import type { ProviderSnapshotSource } from "./builtInProviderCatalog.ts";
+import * as ProviderSpendBudgets from "../usage/ProviderSpendBudgets.ts";
 
 export type ProviderMaintenanceActionKind = "update";
 
@@ -448,6 +449,7 @@ export const layer = Layer.effect(
     const latestVersions = yield* ProviderLatestVersions.ProviderLatestVersions;
     const serviceScope = yield* Effect.scope;
     const config = yield* ServerConfig.ServerConfig;
+    const spendBudgets = yield* Effect.serviceOption(ProviderSpendBudgets.ProviderSpendBudgets);
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
@@ -1359,28 +1361,54 @@ export const layer = Layer.effect(
       }
     });
 
+    const addSpendWindows = Option.isSome(spendBudgets)
+      ? spendBudgets.value.addWindows
+      : Effect.succeed;
+    const getProviders = Ref.get(providersRef).pipe(Effect.flatMap(addSpendWindows));
+    const providerChanges = Stream.fromPubSub(changesPubSub);
     return {
-      getProviders: Ref.get(providersRef),
+      getProviders,
       refresh: (provider?: ProviderDriverKind) =>
-        refresh(provider).pipe(Effect.catchCause(recoverRefreshFailure)),
+        refresh(provider).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.flatMap(addSpendWindows),
+        ),
       refreshInstance: (instanceId: ProviderInstanceId) =>
-        refreshInstance(instanceId).pipe(Effect.catchCause(recoverRefreshFailure)),
+        refreshInstance(instanceId).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.flatMap(addSpendWindows),
+        ),
       reloadSecretsAndRefresh: (instanceId?: ProviderInstanceId) =>
-        reloadSecretsAndRefresh(instanceId).pipe(Effect.catchCause(recoverRefreshFailure)),
+        reloadSecretsAndRefresh(instanceId).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.flatMap(addSpendWindows),
+        ),
       applySecretAndRefresh: (reference: SecretReference, value: string) =>
-        applySecretAndRefresh(reference, value).pipe(Effect.catchCause(recoverRefreshFailure)),
+        applySecretAndRefresh(reference, value).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.flatMap(addSpendWindows),
+        ),
       refreshWorkspaceSnapshot: (input) =>
-        refreshWorkspaceSnapshot(input).pipe(Effect.catchCause(recoverRefreshFailure)),
-      refreshAfterUpdate,
+        refreshWorkspaceSnapshot(input).pipe(
+          Effect.catchCause(recoverRefreshFailure),
+          Effect.flatMap(addSpendWindows),
+        ),
+      refreshAfterUpdate: (provider, instanceId) =>
+        refreshAfterUpdate(provider, instanceId).pipe(Effect.flatMap(addSpendWindows)),
       invalidateModelCaches,
       refreshModelCatalog: refreshModelCatalog().pipe(
         Effect.catchCause(recoverRefreshFailure),
         Effect.asVoid,
       ),
       getProviderMaintenanceCapabilitiesForInstance,
-      setProviderMaintenanceActionState,
+      setProviderMaintenanceActionState: (input) =>
+        setProviderMaintenanceActionState(input).pipe(Effect.flatMap(addSpendWindows)),
       get streamChanges() {
-        return Stream.fromPubSub(changesPubSub);
+        return Option.isNone(spendBudgets)
+          ? providerChanges
+          : Stream.merge(providerChanges, Stream.unwrap(spendBudgets.value.subscribeChanges)).pipe(
+              Stream.mapEffect(() => getProviders),
+            );
       },
     } satisfies ProviderRegistry["Service"];
   }),

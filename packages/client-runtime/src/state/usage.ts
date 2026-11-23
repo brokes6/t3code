@@ -7,6 +7,8 @@ import type { createEnvironmentPresentationAtoms } from "./presentation.ts";
 import { executeAtomQuery, runAtomCommand, squashAtomCommandFailure } from "./runtime.ts";
 import type { createServerEnvironmentAtoms } from "./server.ts";
 
+export { deriveThreadUsageSummary } from "./threadUsageSummary.ts";
+
 const isEnvironmentRpcUnavailable = Schema.is(EnvironmentRpcUnavailableError);
 
 /** The Usage tab asks each environment with that environment's configured model filter. */

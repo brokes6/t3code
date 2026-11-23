@@ -11,7 +11,8 @@ import {
   remainingPercent,
   type ResetCreditChoice,
 } from "@t3tools/shared/usageLimits";
-import { T, useGT, useMessages } from "gt-react";
+import type { ServerProviderUsageWindow } from "@t3tools/contracts";
+import { T, useGT, useLocale, useMessages } from "gt-react";
 import type { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { normalizeProviderAccentColor } from "@t3tools/client-runtime/state/provider-instance-display";
 import { AlertTriangleIcon, ExternalLinkIcon, TicketIcon } from "lucide-react";
@@ -29,8 +30,10 @@ import {
 import { ensureLocalApi } from "../../localApi";
 import { usePrimarySettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
+import { spendBudgetDetails, spendBudgetLabel } from "../../lib/spendBudget";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { limitTone, UsageBar } from "../chat/ThreadDetailsUsage";
 import { providerClients } from "../settings/providerDriverMeta";
 import { RedactedSensitiveText } from "../settings/RedactedSensitiveText";
 import { Button } from "../ui/button";
@@ -685,9 +688,28 @@ export function UsageLimitsPooled({
   const pools = collectLimitPools(collectLimitAccounts(presentations), now);
   const notices = collectLimitNotices(presentations, m);
   const externalLinks = collectExternalUsageLinks(presentations, m);
+  const budgets = [...presentations].flatMap(([id, presentation]) =>
+    (presentation.serverConfig?.providers ?? []).flatMap((provider) =>
+      (provider.usageLimits?.windows ?? []).flatMap((window) =>
+        window.spend === undefined
+          ? []
+          : [
+              {
+                key: `${id}:${provider.instanceId}:${window.id}`,
+                name: provider.displayName ?? provider.instanceId,
+                environment: presentations.size > 1 ? presentation.entry.target.label : null,
+                window,
+              },
+            ],
+      ),
+    ),
+  );
   return (
     <div className="flex flex-col gap-8">
-      {pools.length === 0 && notices.length === 0 && externalLinks.length === 0 ? (
+      {pools.length === 0 &&
+      budgets.length === 0 &&
+      notices.length === 0 &&
+      externalLinks.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           <T>No provider on the selected environments reports subscription limits.</T>
         </p>
@@ -699,6 +721,7 @@ export function UsageLimitsPooled({
           </Fragment>
         ))}
       </SegmentPopoverContext>
+      {budgets.length > 0 ? <SpendBudgetCards budgets={budgets} now={now} /> : null}
       <Popover handle={segmentPopover} actionsRef={segmentPopoverActions}>
         {({ payload }) =>
           payload ? (
@@ -747,6 +770,60 @@ export function UsageLimitsPooled({
       ))}
       <LimitNotices notices={notices} />
     </div>
+  );
+}
+
+function SpendBudgetCards({
+  budgets,
+  now,
+}: {
+  readonly budgets: readonly {
+    readonly key: string;
+    readonly name: string;
+    readonly environment: string | null;
+    readonly window: ServerProviderUsageWindow;
+  }[];
+  readonly now: number;
+}) {
+  const gt = useGT();
+  const locale = useLocale();
+  const m = useMessages();
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="text-sm font-medium text-foreground">{gt("Spend budgets")}</h2>
+      {budgets.map(({ key, name, environment, window }) => {
+        const budget = spendBudgetDetails(window, locale, m, now);
+        const remaining = remainingPercent(window);
+        const reset = formatResetsIn(window, now, m);
+        return (
+          <div
+            key={key}
+            className="grid items-center gap-x-6 gap-y-3 rounded-lg border border-border/60 p-4 md:grid-cols-[11rem_minmax(0,1fr)]"
+          >
+            <div className="grid min-w-0 gap-1">
+              <h3 className="text-sm font-medium break-words">{name}</h3>
+              <p className="text-xs break-words text-muted-foreground">
+                {environment ? `${environment} · ` : ""}
+                {spendBudgetLabel(window, m)}
+              </p>
+            </div>
+            <div className="grid min-w-0 gap-2">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs tabular-nums">
+                <span className={cn("font-medium", budget?.over && "text-error-foreground")}>
+                  {budget?.label}
+                </span>
+                <span className="text-muted-foreground">{budget?.startsIn ?? reset}</span>
+              </div>
+              <UsageBar
+                fill={remaining}
+                tick={paceRemainingPercent(window, now)}
+                tone={budget?.over ? "error" : limitTone(remaining)}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 
