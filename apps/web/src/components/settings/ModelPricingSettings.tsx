@@ -6,7 +6,8 @@ import { useState } from "react";
 import { Button } from "../ui/button";
 import { UsagePriceOverrides } from "../usage/UsagePriceOverrides";
 import { useSearchableSetting } from "./settingsSearch";
-import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { FoldedSettingsSection } from "./FoldedSettingsSection";
+import { SettingsRow } from "./settingsLayout";
 
 export function ModelPricingSettings({
   environmentId,
@@ -37,7 +38,11 @@ export function ModelPricingSettings({
   ].sort((a, b) => a.name.localeCompare(b.name));
   return (
     <>
-      <SettingsSection {...searchableSetting("model-pricing")}>
+      <FoldedSettingsSection
+        id={searchableSetting("model-pricing").id}
+        title={searchableSetting("model-pricing").title}
+        headerPlacement="outside"
+      >
         {models.length === 0 ? (
           <SettingsRow title={gt("No configured models.")} />
         ) : (
@@ -65,7 +70,7 @@ export function ModelPricingSettings({
             );
           })
         )}
-      </SettingsSection>
+      </FoldedSettingsSection>
       {model !== null ? (
         <UsagePriceOverrides
           environmentId={environmentId}

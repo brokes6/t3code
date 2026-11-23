@@ -1390,15 +1390,17 @@ export function ProviderInstanceCard({
             </div>
           }
         />
-        <ProviderSpendBudgetSetting
-          budget={instance.spendBudget}
-          disabled={readOnly || !canWriteSettings}
-          onSave={(budget) => {
-            const { spendBudget: _previousBudget, ...rest } = instance;
-            return onUpdate(budget === undefined ? rest : { ...rest, spendBudget: budget });
-          }}
-        />
       </SettingsSection>
+
+      <ProviderSpendBudgetSetting
+        id={`provider-instance-${instanceId}-spend-budget`}
+        budget={instance.spendBudget}
+        disabled={readOnly || !canWriteSettings}
+        onSave={(budget) => {
+          const { spendBudget: _previousBudget, ...rest } = instance;
+          return onUpdate(budget === undefined ? rest : { ...rest, spendBudget: budget });
+        }}
+      />
 
       {setup || environmentFields.length > 0 ? (
         <SettingsSection title={gt("Setup")}>

@@ -1,28 +1,32 @@
 import { ProviderSpendBudget } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
-import { useGT } from "gt-react";
+import { formatUsd } from "@t3tools/shared/usageFormat";
+import { useGT, useLocale } from "gt-react";
 import { useId, useState } from "react";
 
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-import { SettingsRow } from "./settingsLayout";
+import { FoldedSettingsSection } from "./FoldedSettingsSection";
 
 const isBudget = Schema.is(ProviderSpendBudget);
 const periods = ["day", "week", "month"] as const;
 
 export function ProviderSpendBudgetSetting({
+  id: sectionId,
   budget,
   disabled,
   onSave,
 }: {
+  readonly id: string;
   readonly budget: ProviderSpendBudget | undefined;
   readonly disabled: boolean;
   readonly onSave: (budget: ProviderSpendBudget | undefined) => Promise<boolean>;
 }) {
   const gt = useGT();
+  const locale = useLocale();
   const id = useId();
   const [defaults] = useState(() => {
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -52,12 +56,17 @@ export function ProviderSpendBudgetSetting({
   }
 
   return (
-    <SettingsRow
+    <FoldedSettingsSection
+      id={sectionId}
       title={gt("Spend budget")}
-      description={gt(
-        "For API keys and custom endpoints. Only priced turns recorded by T3 Code count toward this budget.",
-      )}
-      control={
+      summary={budget ? `${formatUsd(budget.amountUsd, locale)} · ${labels[budget.period]}` : null}
+    >
+      <div className="grid gap-3 px-3 py-3 sm:px-4">
+        <p className="text-xs text-muted-foreground">
+          {gt(
+            "For API keys and custom endpoints. Only priced turns recorded by T3 Code count toward this budget.",
+          )}
+        </p>
         <form
           className="grid w-full max-w-sm gap-2"
           onSubmit={(event) => {
@@ -148,7 +157,7 @@ export function ProviderSpendBudgetSetting({
             </Button>
           </div>
         </form>
-      }
-    />
+      </div>
+    </FoldedSettingsSection>
   );
 }
