@@ -23,6 +23,7 @@ import { isUsageLimitsCommand } from "@t3tools/shared/usageLimits";
 import {
   AuthOrchestrationOperateScope,
   DEFAULT_MODEL,
+  MAX_COMPOSER_WORKERS,
   type EnvironmentId,
   type ModelSelection,
   type PreviewAnnotationPayload,
@@ -630,7 +631,7 @@ export function useComposerSend(input: ComposerSendInput) {
         );
         return;
       }
-      const max = capabilities.maxRequestedWorkers ?? 3;
+      const max = Math.min(capabilities.maxRequestedWorkers ?? 3, MAX_COMPOSER_WORKERS);
       if (workers.count > max) {
         setThreadError(
           activeThread.id,

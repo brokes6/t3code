@@ -514,16 +514,15 @@ it("configures workers from the slash menu and sends the selection with the mess
   await expect.element(picker).not.toBeInTheDocument();
   await insertText("/worker");
   await userEvent.keyboard("{Enter}");
-  const count = picker.getByRole("slider", { name: "Workers" });
-  await count.click();
-  await userEvent.keyboard("{Home}{ArrowRight}");
-  await expect.element(count).toHaveValue("2");
-  await userEvent.keyboard("{End}");
-  const customCount = picker.getByRole("spinbutton", { name: "Workers" });
+  const counts = picker.getByRole("group", { name: "Workers" });
+  const count = (value: string) => counts.getByRole("button", { name: value, exact: true });
+  await expect.element(count("1")).toHaveAttribute("aria-pressed", "true");
+  await expect.element(count("5")).not.toBeInTheDocument();
+  await count("2").click();
+  await expect.element(count("2")).toHaveAttribute("aria-pressed", "true");
+  await userEvent.keyboard("{End}{Space}");
+  await expect.element(count("4")).toHaveAttribute("aria-pressed", "true");
   const apply = picker.getByRole("button", { name: "Apply to this message" });
-  await customCount.fill("21");
-  await expect.element(apply).toBeDisabled();
-  await customCount.fill("5");
   const model = picker.getByRole("combobox", { name: "Worker model" });
   await expect.element(model).toHaveTextContent("Same as main agent");
   await model.click();
@@ -541,7 +540,7 @@ it("configures workers from the slash menu and sends the selection with the mess
       expect.objectContaining({
         type: "message.dispatch",
         text: "Implement the feature",
-        context: { version: 1, records: [], workers: { count: 5, model: workerModel } },
+        context: { version: 1, records: [], workers: { count: 4, model: workerModel } },
       }),
     ),
   );
