@@ -25,6 +25,7 @@ import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import {
   poolSources,
   resolveThreadDetailsLimits,
+  resolveThreadHttpQuotas,
   usageWindowDisplay,
 } from "./ThreadDetailsUsage.logic";
 
@@ -53,7 +54,8 @@ export function ThreadDetailsUsage({
   const nowMinute = useNowMinute();
   const now = Date.parse(`${nowMinute}:00Z`);
   const resolved = resolveThreadDetailsLimits(providerInstanceId, model, providers, sources, now);
-  if (!resolved) return null;
+  const quotas = resolveThreadHttpQuotas(providerInstanceId, sources);
+  if (!resolved && quotas.length === 0) return null;
 
   return (
     <ThreadDetailsSection
@@ -62,16 +64,20 @@ export function ThreadDetailsUsage({
       showHeading={false}
     >
       <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
-        {resolved.kind === "pool" ? (
-          resolved.windows.map((window) => <PoolRow key={window.id} window={window} now={now} />)
-        ) : (
-          <InstanceRows
-            limits={resolved.limits}
-            now={now}
-            hasBudget={resolved.budget !== undefined}
-          />
-        )}
-        {resolved.budget ? <LimitRow window={resolved.budget} now={now} /> : null}
+        {resolved?.kind === "pool"
+          ? resolved.windows.map((window) => <PoolRow key={window.id} window={window} now={now} />)
+          : resolved &&
+            (quotas.length === 0 || limitsNotice(resolved.limits) === null) && (
+              <InstanceRows
+                limits={resolved.limits}
+                now={now}
+                hasBudget={resolved.budget !== undefined}
+              />
+            )}
+        {resolved?.budget ? <LimitRow window={resolved.budget} now={now} /> : null}
+        {quotas.map(({ key, accountLabel, window }) => (
+          <LimitRow key={key} window={window} now={now} accountLabel={accountLabel} />
+        ))}
       </div>
     </ThreadDetailsSection>
   );
@@ -166,9 +172,11 @@ export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowS
 function LimitRow({
   window,
   now,
+  accountLabel,
 }: {
   readonly window: ServerProviderUsageWindow;
   readonly now: number;
+  readonly accountLabel?: string;
 }) {
   const gt = useGT();
   const m = useMessages();
@@ -193,6 +201,7 @@ function LimitRow({
           <span className="text-foreground">
             {budget?.label ?? gt("{label}: {left}% left", { label, left })}
           </span>
+          {accountLabel ? <span className="text-muted-foreground">{accountLabel}</span> : null}
           {budget?.startsIn ? (
             <span className="text-muted-foreground">{budget.startsIn}</span>
           ) : null}
