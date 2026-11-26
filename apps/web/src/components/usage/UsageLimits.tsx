@@ -37,11 +37,11 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { UsageLimitsPooled } from "./UsageLimitsPooled";
 import { limitTone, UsageBar } from "./UsageBar";
 import { formatResetsIn, resetCreditChoices } from "@t3tools/shared/usageLimitsCopy";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
+import { SharedTooltipTrigger } from "../ui/shared-tooltip";
 
 const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof GaugeIcon }> = {
   ahead: {
@@ -66,20 +66,18 @@ export function PaceIcon({ pace }: { readonly pace: LimitPace }) {
   const Icon = PACE[pace].icon;
   const m = useMessages();
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <span
-            role="img"
-            aria-label={m(PACE[pace].label)}
-            className="inline-flex text-muted-foreground"
-          />
-        }
-      >
-        <Icon className="size-3.5" aria-hidden />
-      </TooltipTrigger>
-      <TooltipPopup side="top">{m(PACE[pace].label)}</TooltipPopup>
-    </Tooltip>
+    <SharedTooltipTrigger
+      render={
+        <span
+          role="img"
+          aria-label={m(PACE[pace].label)}
+          className="inline-flex text-muted-foreground"
+        />
+      }
+      label={m(PACE[pace].label)}
+    >
+      <Icon className="size-3.5" aria-hidden />
+    </SharedTooltipTrigger>
   );
 }
 
@@ -121,41 +119,41 @@ function WindowBar({
           });
 
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <div
-            role="img"
-            aria-label={summary}
-            tabIndex={0}
-            className="grid h-6 cursor-default items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          />
-        }
-      >
-        <UsageBar fill={remaining} tick={timeLeft} tone={limitTone(remaining)} color={color} />
-      </TooltipTrigger>
-      <TooltipPopup side="top">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-foreground">
-            {timeLeft !== null
-              ? gt("{remaining}% left · {timeLeft}% of the window left", { remaining, timeLeft })
-              : gt("{remaining}% left", { remaining })}
-          </span>
-          {timeLeft !== null ? (
-            <span className="text-muted-foreground">
-              <T>The line is where even spending would be.</T>
+    <SharedTooltipTrigger
+      render={
+        <div
+          role="img"
+          aria-label={summary}
+          tabIndex={0}
+          className="grid h-6 cursor-default rounded-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        />
+      }
+      label={
+        <>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-foreground">
+              {timeLeft !== null
+                ? gt("{remaining}% left · {timeLeft}% of the window left", { remaining, timeLeft })
+                : gt("{remaining}% left", { remaining })}
             </span>
-          ) : null}
-          {resetsAt ? (
-            <span className="text-muted-foreground">
-              {resetsIn
-                ? gt("Resets {resetsAt} · {resetsIn}", { resetsAt, resetsIn })
-                : gt("Resets {resetsAt}", { resetsAt })}
-            </span>
-          ) : null}
-        </div>
-      </TooltipPopup>
-    </Tooltip>
+            {timeLeft !== null ? (
+              <span className="text-muted-foreground">
+                <T>The line is where even spending would be.</T>
+              </span>
+            ) : null}
+            {resetsAt ? (
+              <span className="text-muted-foreground">
+                {resetsIn
+                  ? gt("Resets {resetsAt} · {resetsIn}", { resetsAt, resetsIn })
+                  : gt("Resets {resetsAt}", { resetsAt })}
+              </span>
+            ) : null}
+          </div>
+        </>
+      }
+    >
+      <UsageBar fill={remaining} tick={timeLeft} tone={limitTone(remaining)} color={color} />
+    </SharedTooltipTrigger>
   );
 }
 
