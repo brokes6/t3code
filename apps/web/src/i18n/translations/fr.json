@@ -13070,5 +13070,11 @@
       "v": "v"
     },
     " de plus dans Éléments associés"
-  ]
+  ],
+  "2e93f7e77fdcce38": "Définissez une limite de jetons pour un modèle Codex.",
+  "0906b18567a4850d": "Valeur par défaut du modèle",
+  "9f6e1987810b28d6": "Prend effet au démarrage ou au redémarrage de la session de l’agent. Codex peut plafonner cette valeur.",
+  "c86cbdf8889a91b9": "Configurer",
+  "6e509e555de80917": "Fenêtre de contexte (jetons)",
+  "224f7d661253f1bf": "Impossible d’enregistrer la fenêtre de contexte."
 }

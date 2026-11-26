@@ -13079,5 +13079,11 @@
       "v": "v"
     },
     " more in Linked items"
-  ]
+  ],
+  "2e93f7e77fdcce38": "Set a token limit for an individual Codex model.",
+  "0906b18567a4850d": "Model default",
+  "9f6e1987810b28d6": "Applies when the agent session starts or restarts. Codex may cap this value.",
+  "c86cbdf8889a91b9": "Configure",
+  "6e509e555de80917": "Context window (tokens)",
+  "224f7d661253f1bf": "Could not save the context window."
 }

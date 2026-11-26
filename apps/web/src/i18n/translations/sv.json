@@ -13077,5 +13077,11 @@
       "v": "v"
     },
     " till i Länkade objekt"
-  ]
+  ],
+  "2e93f7e77fdcce38": "Ange en tokengräns för en enskild Codex-modell.",
+  "0906b18567a4850d": "Modellens standardvärde",
+  "9f6e1987810b28d6": "Gäller när agentsessionen startas eller startas om. Codex kan begränsa värdet.",
+  "c86cbdf8889a91b9": "Konfigurera",
+  "6e509e555de80917": "Kontextfönster (token)",
+  "224f7d661253f1bf": "Det gick inte att spara kontextfönstret."
 }

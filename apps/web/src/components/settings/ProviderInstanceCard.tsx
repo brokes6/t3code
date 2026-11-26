@@ -49,6 +49,7 @@ import { SecretSourceInput, type SecretSource } from "./SecretSourceInput";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Switch } from "../ui/switch";
 import { ManagedControl, ManagedNotice } from "../ManagedPolicy";
+import { CodexContextWindowSetting } from "./CodexContextWindowSetting";
 import { managedInstanceLocks, useManagedPolicy } from "../../state/managedPolicy";
 import { disallowedProviderMessage, isManagedDriverAllowed } from "@t3tools/contracts";
 import { stackedThreadToast, toastManager } from "../ui/toast";
@@ -938,7 +939,7 @@ export function ProviderInstanceCard({
 
   const updateConfig = (nextConfig: Record<string, unknown> | undefined) => {
     const { config: _omit, ...rest } = instance;
-    onUpdate(
+    return onUpdate(
       nextConfig !== undefined
         ? ({ ...rest, config: nextConfig } as ProviderInstanceConfig)
         : (rest as ProviderInstanceConfig),
@@ -1492,6 +1493,27 @@ export function ProviderInstanceCard({
 
       {driverOption !== undefined ? (
         <SettingsSection title={gt("Models")}>
+          {instance.driver === "codex" ? (
+            <CodexContextWindowSetting
+              models={modelsForDisplay}
+              stored={
+                instance.config !== null && typeof instance.config === "object"
+                  ? Reflect.get(instance.config, "modelContextWindows")
+                  : undefined
+              }
+              disabled={readOnly}
+              managed={
+                instanceLocks?.configKeys.has("modelContextWindows")
+                  ? instanceLocks.reason
+                  : undefined
+              }
+              onSave={(windows) =>
+                updateConfig(
+                  nextConfigBlobWithValue(instance.config, "modelContextWindows", windows),
+                )
+              }
+            />
+          ) : null}
           <div className="px-3 py-3 sm:px-4">
             <p className="mb-3 text-xs text-muted-foreground">
               <T>

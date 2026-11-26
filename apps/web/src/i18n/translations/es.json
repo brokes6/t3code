@@ -13065,5 +13065,11 @@
       "v": "v"
     },
     " más en Elementos vinculados"
-  ]
+  ],
+  "2e93f7e77fdcce38": "Define un límite de tokens para un modelo de Codex.",
+  "0906b18567a4850d": "Valor predeterminado del modelo",
+  "9f6e1987810b28d6": "Se aplica al iniciar o reiniciar la sesión del agente. Codex puede limitar este valor.",
+  "c86cbdf8889a91b9": "Configurar",
+  "6e509e555de80917": "Ventana de contexto (tokens)",
+  "224f7d661253f1bf": "No se pudo guardar la ventana de contexto."
 }

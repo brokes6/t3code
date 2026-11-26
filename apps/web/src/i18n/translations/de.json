@@ -13070,5 +13070,11 @@
       "v": "v"
     },
     " weitere unter Verknüpfte Elemente"
-  ]
+  ],
+  "2e93f7e77fdcce38": "Tokenlimit für ein einzelnes Codex-Modell festlegen.",
+  "0906b18567a4850d": "Modellstandard",
+  "9f6e1987810b28d6": "Gilt beim Start oder Neustart der Agentensitzung. Codex kann diesen Wert begrenzen.",
+  "c86cbdf8889a91b9": "Konfigurieren",
+  "6e509e555de80917": "Kontextfenster (Token)",
+  "224f7d661253f1bf": "Das Kontextfenster konnte nicht gespeichert werden."
 }

@@ -725,6 +725,14 @@ export function makeProviderSettingsSchema<const Fields extends Schema.Struct.Fi
   );
 }
 
+export const CodexModelContextWindows = Schema.Record(
+  TrimmedNonEmptyString,
+  Schema.Number.check(
+    Schema.isInt(),
+    Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
+  ),
+);
+
 export const CodexSettings = makeProviderSettingsSchema(
   {
     setupMode: Schema.optionalKey(Schema.Literals(["managed", "existing"])).pipe(
@@ -770,6 +778,9 @@ export const CodexSettings = makeProviderSettingsSchema(
         title: "Launch arguments",
         description: "Additional CLI arguments passed to codex app-server on session start.",
       }),
+    ),
+    modelContextWindows: Schema.optionalKey(CodexModelContextWindows).pipe(
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
     customModels: Schema.Array(CustomModelSetting).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),

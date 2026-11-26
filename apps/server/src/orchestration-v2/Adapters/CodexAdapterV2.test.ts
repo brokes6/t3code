@@ -698,6 +698,7 @@ function codexReplayPreamble(input: {
   readonly nativeTurnId: string;
   readonly prompt: string;
   readonly sentPrompt?: string;
+  readonly modelContextWindow?: number;
   readonly effort?: string;
   readonly interactionMode?: "plan" | "default";
   readonly turnPolicy?: Pick<
@@ -744,7 +745,14 @@ function codexReplayPreamble(input: {
       frame: {
         id: 2,
         method: "thread/start",
-        params: { config: CodexAdapterV2.CODEX_THREAD_CONFIG },
+        params: {
+          config: {
+            ...CodexAdapterV2.CODEX_THREAD_CONFIG,
+            ...(input.modelContextWindow === undefined
+              ? {}
+              : { model_context_window: input.modelContextWindow }),
+          },
+        },
       },
     },
     {
@@ -1736,6 +1744,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     promptSuggestions: Effect.Effect<boolean> = Effect.succeed(false),
     onNotification: (method: string) => Effect.Effect<void> = () => Effect.void,
     models?: CodexAdapterV2.CodexAdapterV2Options["models"],
+    settings = DEFAULT_CODEX_SETTINGS,
   ) =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -1795,7 +1804,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       };
       const adapter = yield* CodexAdapterV2.makeCodexAdapterV2({
         instanceId: CodexAdapterV2.CODEX_DEFAULT_INSTANCE_ID,
-        settings: DEFAULT_CODEX_SETTINGS,
+        settings,
         environment: {},
         clientFactory,
         ...(onUsageLimits ? { onUsageLimits } : {}),
@@ -1867,6 +1876,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           > => event.type === "subagent.updated",
         );
       return {
+        adapter,
         runtime,
         providerThread,
         threadId,
@@ -1882,6 +1892,53 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         awaitTerminal: (count: number) => changes.until(() => terminalEvents().length >= count),
       };
     });
+
+  it.effect("loads the selected Codex model with its configured context window", () =>
+    Effect.gen(function* () {
+      const modelContextWindow = 512_000;
+      const transcript = makeCodexReplayTranscript({
+        scenario: "model-context-window",
+        entries: codexReplayPreamble({
+          nativeThreadId: "context-window-thread",
+          nativeTurnId: "context-window-turn",
+          prompt: "Use the configured context window.",
+          modelContextWindow,
+        }).slice(0, 5),
+      });
+      const { adapter } = yield* makeCodexReplayHarness(
+        transcript,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...DEFAULT_CODEX_SETTINGS,
+          modelContextWindows: { [CODEX_TEST_MODEL_SELECTION.model]: modelContextWindow },
+        },
+      );
+      const sessionCapabilities = yield* adapter.getCapabilities();
+      const transition = yield* adapter.planSelectionTransition({
+        current: CODEX_TEST_MODEL_SELECTION,
+        target: { ...CODEX_TEST_MODEL_SELECTION, model: "other-model" },
+        sessionCapabilities,
+      });
+      assert.deepEqual(transition, { type: "restart_session" });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(
+          IdAllocator.layer,
+          McpProviderSessions.layer,
+          NodeServices.layer,
+          NodeCrypto.layer,
+        ),
+      ),
+    ),
+  );
 
   it.effect.each([
     { serverName: "t3-code", asked: true, expected: { own: true } },

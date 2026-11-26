@@ -13070,5 +13070,11 @@
       "v": "v"
     },
     " mais em Itens vinculados"
-  ]
+  ],
+  "2e93f7e77fdcce38": "Defina um limite de tokens para um modelo do Codex.",
+  "0906b18567a4850d": "Padrão do modelo",
+  "9f6e1987810b28d6": "É aplicado ao iniciar ou reiniciar a sessão do agente. O Codex pode limitar esse valor.",
+  "c86cbdf8889a91b9": "Configurar",
+  "6e509e555de80917": "Janela de contexto (tokens)",
+  "224f7d661253f1bf": "Não foi possível salvar a janela de contexto."
 }

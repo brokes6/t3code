@@ -1705,11 +1705,19 @@ function codexStdioMcpServerNames(mcpServers: unknown): ReadonlyArray<string> {
     .map(([name]) => name);
 }
 
+function codexModelContextWindow(settings: CodexSettings, selection?: { readonly model: string }) {
+  const windows = settings.modelContextWindows;
+  return selection && windows && Object.hasOwn(windows, selection.model)
+    ? windows[selection.model]
+    : undefined;
+}
+
 function codexThreadRuntimeParams(input: {
   readonly threadId: ThreadId | null;
   readonly mcpSession: McpProviderSession.McpProviderSessionConfig | undefined;
   readonly stdioMcpServers?: ReadonlyArray<string>;
   readonly modelSelection?: { readonly model: string };
+  readonly modelContextWindow?: number | undefined;
   readonly runtimePolicy?: ProviderAdapter.ProviderAdapterV2RuntimePolicy;
 }): {
   readonly cwd?: string;
@@ -1730,6 +1738,9 @@ function codexThreadRuntimeParams(input: {
     ...(input.modelSelection === undefined ? {} : { model: input.modelSelection.model }),
     config: {
       ...CODEX_THREAD_CONFIG,
+      ...(input.modelContextWindow === undefined
+        ? {}
+        : { model_context_window: input.modelContextWindow }),
       // One app-server serves many threads, so the id goes in per-thread shell config, not its env.
       ...(input.threadId === null
         ? {}
@@ -2139,8 +2150,17 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
     getCapabilities: Effect.fn("CodexAdapterV2.getCapabilities")(function () {
       return Effect.succeed(CodexProviderCapabilitiesV2);
     }),
-    planSelectionTransition: Effect.fn("CodexAdapterV2.planSelectionTransition")(function () {
-      return Effect.succeed(turnScopedSelectionTransition());
+    planSelectionTransition: Effect.fn("CodexAdapterV2.planSelectionTransition")(function ({
+      current,
+      target,
+    }) {
+      // Codex applies config overrides when loading a thread, not when starting a turn.
+      return Effect.succeed(
+        codexModelContextWindow(adapterOptions.settings, current) !==
+          codexModelContextWindow(adapterOptions.settings, target)
+          ? { type: "restart_session" as const }
+          : turnScopedSelectionTransition(),
+      );
     }),
     openSession: Effect.fn("CodexAdapterV2.openSession")(
       function* (input) {
@@ -8490,6 +8510,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     mcpSession,
                     stdioMcpServers,
                     modelSelection: threadInput.modelSelection,
+                    modelContextWindow: codexModelContextWindow(
+                      adapterOptions.settings,
+                      threadInput.modelSelection,
+                    ),
                     runtimePolicy: threadInput.runtimePolicy,
                   }),
                   // Codex tags the child's MCP calls with thread_source "subagent".
@@ -8534,6 +8558,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   threadId: appThreadId,
                   mcpSession: yield* readMcpSession(appThreadId),
                   stdioMcpServers: yield* readStdioMcpServers(threadInput.runtimePolicy?.cwd),
+                  modelContextWindow: codexModelContextWindow(
+                    adapterOptions.settings,
+                    threadInput.modelSelection,
+                  ),
                   ...(threadInput.modelSelection === undefined
                     ? {}
                     : { modelSelection: threadInput.modelSelection }),
@@ -9594,6 +9622,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   threadId: threadInput.targetThreadId,
                   mcpSession: yield* mcpSessions.read(threadInput.targetThreadId),
                   stdioMcpServers: yield* readStdioMcpServers(threadInput.runtimePolicy?.cwd),
+                  modelContextWindow: codexModelContextWindow(
+                    adapterOptions.settings,
+                    threadInput.modelSelection,
+                  ),
                   ...(threadInput.modelSelection === undefined
                     ? {}
                     : { modelSelection: threadInput.modelSelection }),

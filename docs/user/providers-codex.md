@@ -39,6 +39,7 @@ To switch accounts mid-thread, pick another compatible Codex instance sharing th
 
 ## Features and options
 
+- **Context window** (web/desktop): In **Settings → Providers → your Codex instance → Models**, select a token limit for a model. It applies when the agent session starts or restarts. Codex and the endpoint still enforce their limits. Select **Model default** and save to remove the override.
 - **Image generation**: Supported when your Codex version, model, and account allow it. If disabled in Codex config, add `-c features.image_generation=true` to the instance's **Launch arguments** (applies to new sessions).
 - **Async questions**: Codex can ask a question while continuing to work; answer in the question panel (steers the active turn or starts a new one) or dismiss it without sending.
 - **App access approvals**: Respond to external app access requests directly in chat (one-time, session, or permanent depending on the tool).
